@@ -214,6 +214,122 @@ Dopamine 3.x таскает несколько сменных эксплойт-�
   с непрерывного объекта на НЕпрерывный → OOB R/W по physmem через `upl_phys_page`.
 - Это и есть CVE-2025-43520 (DarkSword/ClearSword, CWE-362, CVSS 5.5).
 
+**Сессия 4 (ACM deep-dive):** `LibCall_BuildCommand` проанализирована в beta.
+
+### 4.1 ACM-LibCall интерфейс (`sub_fffffff008f5e170`, стр. 27153)
+
+Функция с прологом:
+
+```asm
+sub_fffffff008f5e170:
+  bti  c
+  pacibsp
+  sub  sp, sp, #0x90
+  stp  x28, x27, [sp, #0x30]
+  stp  x26, x25, [sp, #0x40]
+  stp  x24, x23, [sp, #0x50]
+  stp  x22, x21, [sp, #0x60]
+  stp  x20, x19, [sp, #0x70]
+  stp  fp,  lr,  [sp, #0x80]
+  add  fp, sp, #0x80
+  mov  x24, x5    ; output (команда)
+  mov  x19, x4    ; dataSize
+  mov  x20, x3    ; data
+  mov  x22, x2    ; flags
+  mov  x23, x1    ; type
+  mov  x25, x0    ; version (magic)
+  adrp x28, 0xfffffff00af8a000
+  add  x28, x28, #0x6b8  ; "((" — debug-level global
+  ldrb w8, [x28]         ; read debug-level
+  ...
+  cmp  w8, #0xa
+  b.hi skip_debug
+  ; debug: "%s: %s: called.\n" + "ACM" + "LibCall_BuildCommand"
+```
+
+**Параметры:** `(version, type, flags, data, dataSize, &command)`.
+
+**Проверки аргументов (пролог):**
+1. `cbnz x20, ... / cbnz x19, ...` — data ИЛИ dataSize могут быть NULL (как минимум один не ноль)
+2. `cbz x24, error` — output-команда (буфер) **обязательна**
+3. `adds x26, x19, #8; b.hs overflow` — `dataSize + 8 > SIZE_MAX` → overflow guard
+
+**Затем** — выделение памяти `bl 0xfffffff008f5ea6c` (acm_malloc_data) и **заполнение структуры команды:**
+
+```asm
+0xfffffff008f5e240:  str  w8,  [x21]          ; [0] = 0x53435244 = "DRCS" (ACM magic)
+0xfffffff008f5e244:  strb w25, [x21, #0x4]    ; [4] = version
+0xfffffff008f5e248:  strb w23, [x21, #0x5]    ; [5] = type (request)
+0xfffffff008f5e24c:  strb w22, [x21, #0x6]    ; [6] = flags
+0xfffffff008f5e250:  mov  w8, #0x2
+0xfffffff008f5e254:  strb w8,  [x21, #0x7]    ; [7] = kACMOperation (0x2)
+0xfffffff008f5e258:  cbz  x19, skip_data
+0xfffffff008f5e25c:  add  x0, x21, #0x8       ; payload after header
+0xfffffff008f5e260:  mov  x1, x20
+0xfffffff008f5e264:  mov  x2, x19
+0xfffffff008f5e268:  bl   0xfffffff008f7165c  ; memcpy(data → cmd+8, dataSize)
+```
+
+### 4.2 `acm_command_t` структура (reverse-engineered)
+
+| Смещение | Размер | Поле | Значение в дампе |
+|----------|--------|------|------------------|
+| `+0x0` | 4 байта | `magic` | `0x53435244` = ASCII `"DRCS"` (DRCS = Darwin Restricted Credential Service?) |
+| `+0x4` | 1 байт | `version` | `w25` (передаётся caller'ом) |
+| `+0x5` | 1 байт | `type` | `w23` (request type) |
+| `+0x6` | 1 байт | `flags` | `w22` (флаги) |
+| `+0x7` | 1 байт | `operation` | **`0x2`** (захардкожено в `LibCall_BuildCommand`) |
+| `+0x8` | N байт | `payload` | data (если есть) |
+
+**Ключевой вывод:** `strb w8,[x21,#0x7]` на строке **27213** — это запись `kACMOperation = 2` в **заголовок команды**, а НЕ в глобал `data_fffffff00af8a658+0x7`. Флаг дев-мода НЕ ЗАПИСЫВАЕТСЯ через этот путь.
+
+### 4.3 Write-сайт глобала `data_fffffff00af8a658+0x7` — не найден
+
+Поиск по всему `amfi_beta_full.asm`:
+
+| Паттерн | Результат |
+|---------|-----------|
+| `grep '#0x658'` | только **2 read-сайта** (стр. 902 и 9186) |
+| `grep 'af8a6'` | ни одного `str*` в этот диапазон |
+| `grep 'strb.*x8, \[x8, #0x7\]'` | только строка 27213 — но это `[x21]`, а `x21` = выделенный буфер, а не глобал |
+
+→ **Флаг `data_fffffff00af8a658` НЕ пишется из AMFI**. Write-сайт находится ВНЕ AMFI — вероятно в AppleCredentialManager.kext или напрямую из SEP после обработки LibCall-команды.
+
+### 4.4 Caller анализа (`initAppleCredentialService`, стр. 26844)
+
+```asm
+0xfffffff008f5dc04:  add  x5, sp, #0x30          ; &command (output)
+0xfffffff008f5dc08:  mov  x0, x24                ; service
+0xfffffff008f5dc0c:  mov  w1, #0                 ; version
+0xfffffff008f5dc10:  mov  w2, #0                 ; type
+0xfffffff008f5dc14:  mov  x3, x23                ; data
+0xfffffff008f5dc18:  mov  x4, x19                ; dataSize
+0xfffffff008f5dc1c:  ...
+0xfffffff008f5dd04:  bl   0xfffffff008f5e170     ; LibCall_BuildCommand
+```
+
+После вызова: `cbz x0, fail` / `mov x19, x0` → команда построена успешно.
+Затем проверка `cmp x23, #7; b.ls ...` (стр. 127–128) — размер ответа ≥ 8 байт.
+И возврат через `sub_fffffff008f5df90` / `loc_fffffff008f5e074`.
+
+**Функция инициализирует ACM-сервис:** вызывает `AppleCredentialManager` через `IOServiceOpen`, получает `x26` → `x24`, затем строит LibCall-команду. Строки:
+- `"AppleCredentialManager"` (стр. 26868)
+- `"initAppleCredentialService"` (стр. 26893)
+- `"ACMKernelTransport"` (стр. 26922)
+
+### 4.5 Итог по force-enabled флагу
+
+```
+  ACM/SEP (writer)                        AMFI (reader)
+  ──────────────                          ─────────────
+  [SEP подтверждает dev-mode]
+  → ACM.kext пишет байт в
+    data_fffffff00af8a658+0x7            ldrb w8,[data+0x7]
+                                           tbnz w8,#0
+                                           "developer mode is force enabled"
+```
+
+AMFI только **читает** флаг. Write-сайт — вне AMFI (ACM.kext → SEP round-trip через `LibCall_BuildCommand`/`LibCall_SendCommand`).
 **Следующие шаги:**
 - Найти внешние veneer'ы `0x8f7118c`/`0x8f7119c`/`0x8f710fc` за пределами AMFI-среза (нужен полный kernelcache дамп,
   т.к. `amfi_beta_full.asm` обрывается на `0x8f70aa8`).
