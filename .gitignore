@@ -11,3 +11,9 @@ tmp/
 # OS junk
 .DS_Store
 Thumbs.db
+
+# iOS toolchain artifacts — never versioned (Apple-proprietary SDK + build output)
+poc/SDK/
+poc/build/
+*.ipa
+

@@ -23,7 +23,7 @@
 #include <IOKit/IOKitLib.h>
 #endif
 #ifndef kIOMainPortDefault
-#define kIOMainPortDefault kIOMasterPortDefault
+#define kIOMainPortDefault kIOMainPortDefault
 #endif
 #define POC_AMFI_SERVICE    "AppleMobileFileIntegrity"
 #define POC_ACM_SERVICE     "AppleCredentialManager"
