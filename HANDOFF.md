@@ -518,6 +518,40 @@ question (`HANDOFF` сессия 4, TODO "найти write-сайт флага")
   persist-флага force-enabled). Write-сайт для НЕГО тоже не найден в этой сессии — следующий кандидат для скана
   методом сессии 5 (тот же `macho_tool.py`-подход, но target = `0xfffffff00af8a824`/`0x824` вместо `0x658`).
 
+#### 6.5 Финальный write-сайт-скан (`strb #0x7` по всем сегментам) + разбор `initAppleCredentialService`
+
+**Результат финального скана (дополняет Session 5 / 6.3):**
+- Полный скан `strb w?,[x?,#0x7]` по всем сегментам дал шум (~21745 хитов), т.к. маска ловила также
+  `str`/`ldr` (`0xf9`/`0xb9`).
+- **Уточняющий скан:** среди **82** сайтов `add x8,x8,#0x658` во всех сегментах только **1** имеет
+  предшествующий `adrp x8` на страницу `0xfffffff00af8a000`:
+  `0xfffffff008f46f58` → `ldrb w8,[x8,#0x7]` — это **уже известный READ-сайт** (retention-копия),
+  не write.
+- **Вывод окончательный:** прямого write-сайта флага `data_fffffff00af8a658+0x7`
+  (`add x8,x8,#0x658` + `strb w?,[x8,#0x7]`) в kernelcache НЕТ. Флаг не пишется байтовой записью из
+  AMFI — модель "NVRAM + reboot" (Session 6.3, selector 11 `armSecurityBootMode`) подтверждается
+  **exhaustive-сканом**, а не только отсутствием прямых хитов в `__TEXT_EXEC`.
+
+**Разбор `initAppleCredentialService` (amfi_beta_full.asm, стр. 26790–26960, VA 0xfffffff008f5dc44–0xfffffff008f5dfb4):**
+- Это НЕ прямой вызов `IOConnectCallMethod`/`IOConnectCallScalarMethod` — это **PAC-virtual-call
+  (`blraa`) на vtable-слот `[x16, #0x3a8]`** объекта `ACMKernelTransport` (глобал `data_fffffff00af8a868`,
+  сохранённый в x25):
+  ```
+  ldr   x8, [x28, #0x868]        ; ACMKernelTransport *conn (x25)
+  add   x8, x16, #0x3a8          ; vtable slot
+  ldr   x9, [x16, #0x3a8]
+  x0 = x25 (conn)  x1 = x24 (буфер команды ACMCall)  w2 = #0x1  x3 = x23  x4 = x22
+  x5 = fp-0x54 (scalarOut)  x6 = sp+0x3c (structInput = ACMCall)
+  blraa x9, x17
+  ```
+- **Значение X2 в этом вызове = `#0x1`** — это **НЕ selector**, а `count` элементов inputStruct
+  (`ACMCall`). Селектор в этом слое не передаётся регистром: vtable-слот `+0x3a8` — это
+  единственный общий `performCommand`, а "версия команды" задаётся полем `version`
+  (`ldrb w26, [x19, #0x4]` — поле ACMCall.version, см. структуру в Session 4.2).
+- Userspace-селекторы живут в таблице `IOExternalMethodDispatch` (Session 6.2) — именно оттуда
+  ключ для цепочки ECS/DRCS: **selector 11 = `armSecurityBootMode`** (entitlement
+  `com.apple.private.amfi.developer-mode-control`).
+
 #### Следующие шаги (если продолжать)
 1. Прогнать байт-скан сессии 5 (ADRP+ADD+ldrb/strb) на НОВЫЙ адрес `data_fffffff00af8a824` (bss-флаг "armed"),
    на обоих firmware.
