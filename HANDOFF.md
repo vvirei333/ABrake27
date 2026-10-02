@@ -391,3 +391,144 @@ RE-задача (аналог проблемы с PAC-vtable в IOSurface-вет
 следующий шаг.
 
 ---
+
+### Сессия 6: IOKit IOUserClient Selector Analysis — полная карта селекторов `AppleMobileFileIntegrityUserClient`
+
+Инициировано параллельной задачей (тандем с дипсиком, Сессия 6 "Поиск MIG ID" → переосмыслено как поиск
+IOUserClient selector'ов, раз `initAppleCredentialService`/`IOServiceOpen` работают через IOKit externalMethod,
+а не классический Mach MIG).
+
+#### 6.1 Техника: раскодирование `IOExternalMethodDispatch`-таблицы
+
+Диспетчер селекторов найден прямо перед известной строкой `"virtual IOReturn
+AppleMobileFileIntegrityUserClient::externalMethod(...)"` (`sub_fffffff008f46528`, asm-строка 170 в
+`amfi_beta_full.asm`):
+```asm
+cmp  w1, #0x11                    ; selector > 17 (0x11)?
+b.hi loc_fffffff008f4658c          ; -> "unrecognized method selector %d", return 0xe00002c7
+mov  w8, #0x18                     ; entry size = 24 = sizeof(IOExternalMethodDispatch)
+adrp x9, 0xfffffff007e8a000
+add  x9, x9, #0x648                ; data_fffffff007e8a648 (__DATA_CONST.__const) — таблица из 18 записей
+umull x8, w1, w8                   ; index = selector * 24
+...
+ldr  x8, [x3]                      ; dispatch[selector].function  (PAC-кодированный указатель, chained-fixup)
+cbz  x8, loc_...658c
+...
+braa x16, x17                      ; PAC-аутентифицированный переход на реальный обработчик
+```
+Это классический `IOExternalMethodDispatch sMethods[18]` — статическая const-таблица, `cmp w1,#0x11` → **18
+валидных селекторов (0..17)**.
+
+**Формат указателей в `__DATA_CONST`** (arm64e chained fixups, kernelcache-вариант): нижние **32 бита** 64-битного
+слова — это смещение от базы kernelcache (`__TEXT.vmaddr = 0xfffffff007004000`), верхние биты — PAC
+diversity/key/next (chain). Т.е. `real_VA = 0xfffffff007004000 + (raw_qword & 0xffffffff)`. Формула проверена:
+совпала с уже известными адресами (`loadTrustCache` @ `0xfffffff008f465c8` и т.д. — см. ниже).
+
+Доп. 4×`uint32_t` в каждой 24-байтной записи — это НЕ указатели, а обычные `checkScalarInputCount`,
+`checkStructureInputSize`, `checkScalarOutputCount`, `checkStructureOutputSize` — читаются напрямую без фиксапов,
+дают сигнатуру метода (кол-во scalar/struct аргументов на вход/выход) даже когда сама функция ещё не
+декомпилирована.
+
+Добавлен скрипт разбора (ad-hoc, не фиксирован в репо как отдельный файл — использован `python3 -` инлайн,
+логика идентична `research/macho_tool.py`'s `v2o()` + ручной разбор 24-байтных записей).
+
+#### 6.2 Полная таблица (beta 27.2 b2, `data_fffffff007e8a648`, 18 записей)
+
+| Sel | Target VA | Имя (если найдено) | Entitlement | Сигнатура (in_scalar, in_struct, out_scalar, out_struct) |
+|---|---|---|---|---|
+| 0 | — (null) | — | — | — |
+| 1 | — (null) | — | — | — |
+| 2 | `0xfffffff008f465c8` | **loadTrustCache** (алиас) | `com.apple.private.amfi.can-load-trust-cache` | (0, var, 0, 0) |
+| 3 | — (null) | — | — | — |
+| 4 | `0xfffffff008f467e8` | (служебный аксессор, не определён) | — | (0, 0, 0, 0) |
+| 5 | `0xfffffff008f46838` | **loadCompilationServiceCodeDirectoryHash** | `com.apple.private.amfi.can-load-cdhash` | (0, var, 0, 0) |
+| 6 | `0xfffffff008f469c0` | **isCdhashInTrustCache** | (не определён в этом срезе) | (1, var, 0, 0) |
+| 7 | `0xfffffff008f465c8` | **loadTrustCache** | `com.apple.private.amfi.can-load-trust-cache` | (0, var, 0, 0) |
+| 8 | — (null) | — | — | — |
+| 9 | `0xfffffff008f46af4` | **setDenylist** | `com.apple.private.amfi.can-set-denylist` | (1, var, 0, 0) |
+| 10 | — (null) | — | — | — |
+| 11 | `0xfffffff008f46dd0` | **armSecurityBootMode** ⭐ | `com.apple.private.amfi.developer-mode-control` | (1, 0, 0, 0) |
+| 12 | `0xfffffff008f46e5c` | (не названа; тело → `sub_fffffff008f4e840`, см. 6.4) | `com.apple.private.amfi.developer-mode-control` | (0, 0, 0, 0) |
+| 13 | `0xfffffff008f46ea4` | (не названа; garbage-collect) | `com.apple.private.amfi.garbage-collect-profiles` | (0, 0, 0, 0) |
+| 14 | `0xfffffff008f46ee0` | (не названа; тело → `sub_fffffff008f4e870`, см. 6.4) | `com.apple.private.amfi.developer-mode-control` | (0, 0, 0, 0) |
+| 15 | `0xfffffff008f46f28` | **getDeveloperModeForceEnabled** (имя наше, не из строк) ⭐ | `com.apple.private.amfi.developer-mode-control` | (0, 0, **1**, 0) |
+| 16 | `0xfffffff008f46f84` | **completeSecurityBootMode** | (нет явной проверки в этой функции) | (1, 0, 0, 0) |
+| 17 | `0xfffffff008f46fd8` | (вызывает `copyBytesFromInputArguments`) | — | (0, 0, 0, 0) |
+
+Таблица валидна только для **beta** (`24B5089g`); для stable адреса будут другими (нужен отдельный прогон —
+не сделано в этой сессии, т.к. адреса `__TEXT_EXEC` в stable смещены по-другому; метод тот же).
+
+#### 6.3 ⭐ Selector 11 `armSecurityBootMode` — САМЫЙ ВАЖНЫЙ РЕЗУЛЬТАТ СЕССИИ: найден write-примитив для dev-mode
+
+Thin-обёртка (`sub_fffffff008f46dd0`): проверяет entitlement `com.apple.private.amfi.developer-mode-control`,
+валидирует `scalarInput`/`scalarInputCount`, читает `w0 = *scalarInput[0]`, хвостовой `b` →
+`sub_fffffff008f4e64c` (реальная логика):
+
+```c
+// реконструкция по sub_fffffff008f4e64c (asm-строки 9365-9474, amfi_beta_full.asm)
+nvram = IOServiceGetMatchingService("IODTNVRAM");           // bl 0xfffffff008f70efc
+client = /* open/get property client из nvram */            // bl 0xfffffff008f70f0c
+snprintf(buf, 0x10, "%u", scalarInput_value);               // bl 0xfffffff008f718dc, "%u"
+cfstr = CFStringCreate(buf);                                 // bl 0xfffffff008f70e6c
+ok = client->vtable[0x2e](client, "security-mode-change-enable", cfstr); // blraa, vtable+0xb8
+if (ok) log("AMFI: armed security boot mode: %s\n", buf);
+else    log("AMFI: failed to arm security boot mode: %u\n", scalarInput_value);
+```
+
+**Вывод:** `armSecurityBootMode` — это, судя по форме (IODTNVRAM + `setProperty`-подобный PAC-virtual-call +
+строковое значение), запись **NVRAM-переменной `security-mode-change-enable`** в десятичное строковое значение
+переданного userspace-вызывающим `scalarInput`. Это **ровно тот механизм, которым публично известный UX
+"Enable Developer Mode" (Settings → Privacy & Security → Developer Mode, требующий перезагрузки) скорее всего
+реализован под капотом**: приложение/демон с нужным entitlement вызывает
+`IOConnectCallScalarMethod(conn, 11, &value, 1, NULL, 0)` → AMFI "взводит" NVRAM-флаг → на следующей загрузке
+iBoot/SEP читают `security-mode-change-enable` и (предположительно) выставляют тот самый бит
+`data_fffffff00af8a658+0x7`, который AMFI потом читает в рантайме (selector 15 и decision-функция
+`sub_fffffff008f4e0f0`).
+
+**Это — первое прямое, конкретное звено в цепочке ACM/SEP-writer, которую сессии 3-5 искали вслепую.** Не
+прямая байтовая запись (поэтому её не нашёл байт-скан сессии 5), а **NVRAM + reboot**, что меняет модель: флаг
+не пишется "вживую" через ACM LibCall в рантайме, а **взводится заранее через NVRAM и применяется при следующей
+загрузке** (судя по всему, самим iBoot/SEP до старта kernel, а не ACM.kext в рантайме — гипотеза ACM/SEP из
+сессии 4, возможно, была ПОЛОВИНОЙ картины: `LibCall_ACMKernelControl`/`LibCall_BuildCommand` может относиться
+к чему-то другому, не к этому конкретному флагу).
+
+**Практическая гейтинг-оговорка (как и во всех прошлых находках этого проекта):** `armSecurityBootMode`
+гейтится ТЕМ ЖЕ entitlement'ом (`com.apple.private.amfi.developer-mode-control`), что и чтение флага —
+platform-only entitlement, недоступен обычному/сайдлоаднутому приложению без уже имеющегося jailbreak/platformize
+примитива. Не снимает блокер "нет публичного пути для iOS 27", но закрывает конкретный давно висящий open
+question (`HANDOFF` сессия 4, TODO "найти write-сайт флага").
+
+#### 6.4 Прочие новые находки
+
+- **Selector 16 `completeSecurityBootMode`** → `sub_fffffff008f4e51c` (= `AMFIUpdateDeviceState`, уже упомянутая
+  в сессии 3 по имени из лога): если `data_fffffff007e8b734 == 2` (ещё один const-флаг состояния) И доп. проверка
+  (`sub_fffffff008f522d4`) проходит → логирует `"informing daemon of developer mode state change"` и зовёт
+  `sub_fffffff008f5d6e8` (userspace-уведомление, не исследовано глубже).
+- **Selector 12** (не названа) → `sub_fffffff008f4e840`: читает **ДРУГОЙ** const-флаг (`data_fffffff007e8b738`
+  bit0, тоже `__DATA_CONST.__const`); если бит установлен → зовёт **ту же decision-функцию**
+  `sub_fffffff008f4e0f0` (= "функция принятия решения об enable developer mode" из сессии 3/4), иначе →
+  `sub_fffffff008f6f974` (не исследовано).
+- **Selector 14** (не названа) → `sub_fffffff008f4e870`: зовёт `sub_fffffff008f5ee38(0x25,0,0)`, затем ТОЖЕ
+  зовёт decision-функцию `sub_fffffff008f4e0f0`, логирует `"AMFI: Developer Mode is off (%i)\n"`. Похоже на
+  диагностический "почему dev mode выключен" геттер.
+- **Новый, отдельный флаг найден попутно:** `sub_fffffff008f4e8c4` (простой геттер сразу после selector 14's
+  реализации) читает **`data_fffffff00af8a824` бит 0** в **`__DATA.__bss`** (не `__data`, как
+  `af8a658` — т.е. **обнуляется каждую загрузку, не персистентный**) — отдельная переменная от
+  "developer-mode-force-enabled". Вероятно это runtime "is security boot mode armed" бит (отличается от
+  persist-флага force-enabled). Write-сайт для НЕГО тоже не найден в этой сессии — следующий кандидат для скана
+  методом сессии 5 (тот же `macho_tool.py`-подход, но target = `0xfffffff00af8a824`/`0x824` вместо `0x658`).
+
+#### Следующие шаги (если продолжать)
+1. Прогнать байт-скан сессии 5 (ADRP+ADD+ldrb/strb) на НОВЫЙ адрес `data_fffffff00af8a824` (bss-флаг "armed"),
+   на обоих firmware.
+2. Подтвердить гипотезу `IODTNVRAM`/`setProperty` для `armSecurityBootMode`: проверить публичные заголовки
+   IOKit (`IOKit/nvram/IONVRAMController.h` и т.п., если есть в `extracted/.../root/`) на предмет вызова по
+   сигнатуре `(obj, const char*, OSObject*)` на оффсете vtable `+0xb8`.
+3. Повторить разбор таблицы (6.1-6.2) для **stable** kernelcache — подтвердить тот же layout/сигнатуры (ожидаемо
+   идентично, просто другие адреса — session 4 уже показала, что caller/структура не меняется между версиями).
+4. Проверить, обёрнут ли `com.apple.private.amfi.developer-mode-control` вокруг *вызова* `IOConnectCallMethod`
+   со стороны userspace (т.е. нужен ли он только читающему демону, или именно `armSecurityBootMode`-пути) —
+   в `extracted/{stable,beta}/.../root/` поискать, какой процесс РЕАЛЬНО держит этот entitlement
+   (`codesign -d --entitlements` по системным бинарям, если они там есть распакованные).
+
+---
