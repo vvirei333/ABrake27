@@ -1,7 +1,5 @@
-# HANDOFF — iPhone iOS 27.0 vs 27.2 diff / разбор CVE-2025-43520
-
-> Файл для передачи контекста между ИИ-сессиями. Обновлять после каждой сессии.
-> Дата последнего обновления: сессия 6 (см. журнал ниже).
+# HANDOFF — iPhone iOS 27.0 vs 27.2 diff / AMFI dev-mode PoC
+> Дата последнего обновления: сессия 8 (см. журнал ниже).
 
 ## Что это
 
@@ -597,5 +595,72 @@ cd poc && ./build_ipa.sh
 - ACM: open может упасть (сервис приватный); если OK — проба payload с логом всех kern_return.
 
 **Среда:** Linux (gcc/python3), без Xcode → синтакс-чек пройден; `.ipa` собирается на macOS скриптом.
+
+---
+
+### Сессия 8: Активация бинарника и обход AMFI
+
+**Статус на начало сессии:**
+- IPA `EnableAMFIDevMode.ipa` собран на CachyOS Linux (arm64+arm64e fat binary, ldid-signed с entitlements).
+- Установлен на iPhone 13 через `ideviceinstaller --install` — иконка появилась на экране.
+- Иконка **серая с облачком** — ошибка 0xe800801c (AMFI signature validation rejection).
+- Приложение НЕ запускается: AMFI/AFC (Apple File Conduit) не даёт запустить unsigned/fake-signed бинарник без валидного Apple-сертификата.
+
+**Цель сессии:** запустить `EnableAMFIDevMode` на iPhone 13 и активировать Developer Mode через selector 11.
+
+#### Сценарий А: TrollStore (CoreTrust bypass)
+
+**Требуется:** на устройстве уже установлен TrollStore (iOS 14.0-16.6.1 / 17.0 с CT bug) или устройство джейлбрейкнуто.
+
+**План:**
+1. Установить TrollStore на iPhone 13 (если ещё нет) через один из методов: 
+   - `TrollInstallerX` (прямая установка через уязвимость ядра)
+   - `TrollRestore` (если устройство поддерживает)
+2. Скопировать IPA на устройство:
+   ```
+   scp EnableAMFIDevMode.ipa mobile@<iphone-ip>:/var/mobile/Documents/
+   ```
+3. В TrollStore → `+` → выбрать `EnableAMFIDevMode.ipa` → установить.
+4. TrollStore использует баг в CoreTrust (`CVE-2022-26766`, `CVE-2022-26763`), чтобы **фальшиво подписать** бинарник валидным сертификатом (обход проверки AMFI через `amfid`).
+5. После установки приложение **не будет серым** — запуск через иконку на экране.
+6. Запуск PoC:
+   ```
+   ./EnableAMFIDevMode 1
+   ```
+7. После успешного selector 11 → **ребут** для активации Developer Mode.
+
+**Риски:** требуется уязвимая версия iOS (TrollStore работает до iOS 17.0). На iOS 27 это **не сработает** — CT-баги давно исправлены.
+
+#### Сценарий Б: SideStore / AltStore (Linux-сервер)
+
+**Требуется:** стоковое устройство, Apple ID, Linux-сервер с Anisette.
+
+**План:**
+1. Развернуть Anisette-сервер на Linux:
+   ```bash
+   git clone https://github.com/SideStore/SideServer
+   cd SideServer
+   ```
+   Альтернатива: `AltServer-Linux` (через `wine` или нативный порт `AltServer-LinuxShell`).
+2. Установить SideStore на iPhone:
+   - Скачать `SideStore.ipa` с https://sidestore.io
+   - Залить через `AltDeploy` / `SideServer` пользуясь Anisette-сервером.
+3. В SideStore добавить свой Apple ID (логин через Anisette).
+4. В SideStore → `+` → выбрать `EnableAMFIDevMode.ipa`.
+   - SideStore **переподписывает** бинарник валидным сертификатом разработчика (7-дневный free provisioning profile).
+5. Запустить приложение с экрана.
+6. Запуск PoC: `./EnableAMFIDevMode 1`
+7. После selector 11 — ребут.
+
+**Минусы:** 7-дневный срок подписи + ограничение на 3 приложения на один Apple ID (free tier). Нужен Apple ID.
+
+**Риски:** `platform-application` entitlement может быть отброшен при ресайнинге.
+
+#### Следующие шаги
+
+1. Определить версию iOS на iPhone 13 (для выбора TrollStore vs SideStore).
+2. Если iOS ≤17.0 — попробовать TrollStore (быстрый путь).
+3. Если iOS новее — развернуть SideStore/AltStore с Linux-сервером anisette.
+4. После успешного запуска — selector 11, ребут, верификация Developer Mode в Настройках.
 
 ---
