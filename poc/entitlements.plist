@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Platform-restricted; NOT grantable to a sideloaded app without an
+	     existing platform/jailbreak primitive. Included for completeness and
+	     for on-device testing on a device you fully control. -->
+	<key>com.apple.private.amfi.developer-mode-control</key>
+	<true/>
+	<key>com.apple.private.amfi.can-load-trust-cache</key>
+	<true/>
+	<key>platform-application</key>
+	<true/>
+	<!-- Needed so the binary may talk to arbitrary IOKit services. -->
+	<key>com.apple.security.iokit-user-client-class</key>
+	<array>
+		<string>AppleMobileFileIntegrityUserClient</string>
+		<string>AppleCredentialManagerUserClient</string>
+	</array>
+</dict>
+</plist>

@@ -566,3 +566,36 @@ question (`HANDOFF` сессия 4, TODO "найти write-сайт флага")
    (`codesign -d --entitlements` по системным бинарям, если они там есть распакованные).
 
 ---
+---
+
+### Сессия 7: Production PoC Source Code (EnableAMFIDevMode)
+
+Файлы (в `poc/`):
+
+| Файл | Назначение |
+|---|---|
+| `poc/poc.c` | Исходник PoC (C99, IOKit/CoreFoundation). AMFI: `IOServiceOpen("AppleMobileFileIntegrity")` → `IOConnectCallScalarMethod(sel 11, value, 1, NULL, NULL)` (armSecurityBootMode) + `sel 15` read-back. ACM: `IOServiceOpen("AppleCredentialManager")` → `IOConnectCallMethod` с реверснутым struct-входом (magic DRCS 0x53435244 + SCE$ 0x53434524, проба селекторов 0/1/2/11). |
+| `poc/stubs/iokit_stub.h` | Минимальный IOKit-заголовок для `gcc -fsyntax-only` на Linux. |
+| `poc/entitlements.plist` | `com.apple.private.amfi.developer-mode-control`, `platform-application`, `com.apple.security.iokit-user-client-class`. |
+| `poc/build_ipa.sh` | macOS-сборка: `xcrun clang` (arm64/arm64e, iOS SDK 16.0+), `ldid -S`, zip в `EnableAMFIDevMode.ipa`. |
+| `poc/syntax_check_linux.sh` | Валидация синтаксиса gcc через стабы (работает, EXIT=0). |
+
+**Сборка для твоего iPhone:**
+```bash
+# На Mac с Xcode:
+cd poc && ./build_ipa.sh
+# Получишь EnableAMFIDevMode.ipa — установи через Xcode/AltStore/SideStore.
+# На iPhone запусти в терминале (через SSH/NewTerm):
+./EnableAMFIDevMode 1
+# Лог: /tmp/amfi_devmode_poc.log   + вывод в stdout.
+```
+
+**Ожидаемое поведение на живом устройстве:**
+- AMFI open — OK или отказ (если нет platform-application).
+- Selector 11: `kIOReturnSuccess` → NVRAM `security-mode-change-enable=1` → **REBOOT** для активации Developer Mode.
+- Selector 15: read-back текущего `getDeveloperModeForceEnabled`.
+- ACM: open может упасть (сервис приватный); если OK — проба payload с логом всех kern_return.
+
+**Среда:** Linux (gcc/python3), без Xcode → синтакс-чек пройден; `.ipa` собирается на macOS скриптом.
+
+---
