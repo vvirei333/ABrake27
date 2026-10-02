@@ -1,0 +1,49 @@
+## DigitalAccess
+
+> `/System/Library/PrivateFrameworks/DigitalAccess.framework/DigitalAccess`
+
+```diff
+
+-70.39.1.0.0
+-  __TEXT.__text: 0x3ae60
++71.8.0.0.0
++  __TEXT.__text: 0x3af10
+   __TEXT.__objc_methlist: 0x2c64
+   __TEXT.__const: 0x700
+-  __TEXT.__cstring: 0x8d46
++  __TEXT.__cstring: 0x8d8e
+   __TEXT.__oslogstring: 0x249c
+   __TEXT.__gcc_except_tab: 0x1208
+   __TEXT.__unwind_info: 0xe28
+Symbols:
++ +[DAManager(PendingPairing) createPendingPairingForManufacturer:brand:pairingPassword:supportedTransports:ppid:pti:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:messageIdentifier:sourceReceivedDate:sourceLanguage:alreadyProvisioned:]
++ +[DAManager(PendingPairing) createPendingPairingForOPURL:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:messageIdentifier:sourceReceivedDate:sourceLanguage:alreadyProvisioned:simulateBiomeEvent:]
++ -[DAManager(PendingPairing) createPendingPairingForManufacturer:brand:pairingPassword:supportedTransports:ppid:pti:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:messageIdentifier:sourceReceivedDate:sourceLanguage:alreadyProvisioned:]
++ -[DAManager(PendingPairing) createPendingPairingForOPURL:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:messageIdentifier:sourceReceivedDate:sourceLanguage:alreadyProvisioned:simulateBiomeEvent:]
++ -[KmlSettingsManager ignoreProcessedSourceIdentifierCheck]
++ ___257-[DAManager(PendingPairing) createPendingPairingForOPURL:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:messageIdentifier:sourceReceivedDate:sourceLanguage:alreadyProvisioned:simulateBiomeEvent:]_block_invoke
++ ___296-[DAManager(PendingPairing) createPendingPairingForManufacturer:brand:pairingPassword:supportedTransports:ppid:pti:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:messageIdentifier:sourceReceivedDate:sourceLanguage:alreadyProvisioned:]_block_invoke
+- +[DAManager(PendingPairing) createPendingPairingForManufacturer:brand:pairingPassword:supportedTransports:ppid:pti:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:sourceReceivedDate:sourceLanguage:alreadyProvisioned:]
+- +[DAManager(PendingPairing) createPendingPairingForOPURL:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:sourceReceivedDate:sourceLanguage:alreadyProvisioned:simulateBiomeEvent:]
+- -[DAManager(PendingPairing) createPendingPairingForManufacturer:brand:pairingPassword:supportedTransports:ppid:pti:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:sourceReceivedDate:sourceLanguage:alreadyProvisioned:]
+- -[DAManager(PendingPairing) createPendingPairingForOPURL:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:sourceReceivedDate:sourceLanguage:alreadyProvisioned:simulateBiomeEvent:]
+- -[KmlSettingsManager ignoreProcessedSpotlightIdCheck]
+- ___239-[DAManager(PendingPairing) createPendingPairingForOPURL:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:sourceReceivedDate:sourceLanguage:alreadyProvisioned:simulateBiomeEvent:]_block_invoke
+- ___278-[DAManager(PendingPairing) createPendingPairingForManufacturer:brand:pairingPassword:supportedTransports:ppid:pti:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:sourceReceivedDate:sourceLanguage:alreadyProvisioned:]_block_invoke
+Functions:
+~ +[KmlManagerInterface interface] : 3648 -> 3652
+~ +[DAManager(PendingPairing) createPendingPairingForManufacturer:brand:pairingPassword:supportedTransports:ppid:pti:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:sourceReceivedDate:sourceLanguage:alreadyProvisioned:] -> +[DAManager(PendingPairing) createPendingPairingForManufacturer:brand:pairingPassword:supportedTransports:ppid:pti:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:messageIdentifier:sourceReceivedDate:sourceLanguage:alreadyProvisioned:] : 452 -> 484
+~ -[DAManager(PendingPairing) createPendingPairingForManufacturer:brand:pairingPassword:supportedTransports:ppid:pti:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:sourceReceivedDate:sourceLanguage:alreadyProvisioned:] -> -[DAManager(PendingPairing) createPendingPairingForManufacturer:brand:pairingPassword:supportedTransports:ppid:pti:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:messageIdentifier:sourceReceivedDate:sourceLanguage:alreadyProvisioned:] : 756 -> 792
+~ +[DAManager(PendingPairing) createPendingPairingForOPURLString:] : 492 -> 540
+~ +[DAManager(PendingPairing) createPendingPairingForOPURL:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:sourceReceivedDate:sourceLanguage:alreadyProvisioned:simulateBiomeEvent:] -> +[DAManager(PendingPairing) createPendingPairingForOPURL:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:messageIdentifier:sourceReceivedDate:sourceLanguage:alreadyProvisioned:simulateBiomeEvent:] : 328 -> 372
+~ -[DAManager(PendingPairing) createPendingPairingForOPURL:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:sourceReceivedDate:sourceLanguage:alreadyProvisioned:simulateBiomeEvent:] -> -[DAManager(PendingPairing) createPendingPairingForOPURL:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:messageIdentifier:sourceReceivedDate:sourceLanguage:alreadyProvisioned:simulateBiomeEvent:] : 652 -> 664
+CStrings:
++ "-[DAManager(PendingPairing) createPendingPairingForManufacturer:brand:pairingPassword:supportedTransports:ppid:pti:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:messageIdentifier:sourceReceivedDate:sourceLanguage:alreadyProvisioned:]"
++ "-[DAManager(PendingPairing) createPendingPairingForManufacturer:brand:pairingPassword:supportedTransports:ppid:pti:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:messageIdentifier:sourceReceivedDate:sourceLanguage:alreadyProvisioned:]_block_invoke"
++ "-[DAManager(PendingPairing) createPendingPairingForOPURL:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:messageIdentifier:sourceReceivedDate:sourceLanguage:alreadyProvisioned:simulateBiomeEvent:]"
++ "-[DAManager(PendingPairing) createPendingPairingForOPURL:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:messageIdentifier:sourceReceivedDate:sourceLanguage:alreadyProvisioned:simulateBiomeEvent:]_block_invoke"
+- "-[DAManager(PendingPairing) createPendingPairingForManufacturer:brand:pairingPassword:supportedTransports:ppid:pti:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:sourceReceivedDate:sourceLanguage:alreadyProvisioned:]"
+- "-[DAManager(PendingPairing) createPendingPairingForManufacturer:brand:pairingPassword:supportedTransports:ppid:pti:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:sourceReceivedDate:sourceLanguage:alreadyProvisioned:]_block_invoke"
+- "-[DAManager(PendingPairing) createPendingPairingForOPURL:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:sourceReceivedDate:sourceLanguage:alreadyProvisioned:simulateBiomeEvent:]"
+- "-[DAManager(PendingPairing) createPendingPairingForOPURL:pairingPasswordExpiration:vehicleName:userNotificationDate:spotlightDomain:spotlightUniqueId:spotlightBundle:sourceReceivedDate:sourceLanguage:alreadyProvisioned:simulateBiomeEvent:]_block_invoke"
+```

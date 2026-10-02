@@ -1,0 +1,155 @@
+## SpotlightUIInternal
+
+> `/System/Library/PrivateFrameworks/SpotlightUIInternal.framework/SpotlightUIInternal`
+
+```diff
+
+-236.0.21.105.0
+-  __TEXT.__text: 0x4f410
+-  __TEXT.__objc_methlist: 0x5d50
+-  __TEXT.__const: 0x13c0
+-  __TEXT.__cstring: 0x13e2
+-  __TEXT.__oslogstring: 0x133a
+-  __TEXT.__gcc_except_tab: 0x27c
++250.1.4.1.0
++  __TEXT.__text: 0x5201c
++  __TEXT.__objc_methlist: 0x5d60
++  __TEXT.__const: 0x1488
++  __TEXT.__cstring: 0x14ba
++  __TEXT.__oslogstring: 0x1376
++  __TEXT.__gcc_except_tab: 0x2d0
+   __TEXT.__ustring: 0x4
+   __TEXT.__dlopen_cstrs: 0x54
+-  __TEXT.__swift5_typeref: 0xe1a
+-  __TEXT.__swift5_capture: 0x270
+-  __TEXT.__constg_swiftt: 0x6c8
+-  __TEXT.__swift5_reflstr: 0x330
+-  __TEXT.__swift5_fieldmd: 0x3bc
+-  __TEXT.__swift5_types: 0x64
++  __TEXT.__swift5_typeref: 0xed0
++  __TEXT.__swift5_capture: 0x2dc
++  __TEXT.__constg_swiftt: 0x6e4
++  __TEXT.__swift5_reflstr: 0x3d6
++  __TEXT.__swift5_fieldmd: 0x42c
++  __TEXT.__swift5_types: 0x68
+   __TEXT.__swift5_builtin: 0x50
+   __TEXT.__swift5_assocty: 0x128
+   __TEXT.__swift5_proto: 0x60
+-  __TEXT.__swift_as_entry: 0x40
+-  __TEXT.__swift_as_ret: 0x50
+-  __TEXT.__swift_as_cont: 0x8c
++  __TEXT.__swift_as_entry: 0x4c
++  __TEXT.__swift_as_ret: 0x60
++  __TEXT.__swift_as_cont: 0xac
+   __TEXT.__swift5_mpenum: 0x10
+-  __TEXT.__unwind_info: 0x1608
+-  __TEXT.__eh_frame: 0xc70
++  __TEXT.__unwind_info: 0x16f8
++  __TEXT.__eh_frame: 0xf50
+   __TEXT.__objc_stubs: 0x0
+   __TEXT.__auth_stubs: 0x0
+   __TEXT.__objc_classname: 0x0
+   __TEXT.__objc_methname: 0x0
+   __TEXT.__objc_methtype: 0x0
+-  __DATA_CONST.__const: 0xc60
++  __DATA_CONST.__const: 0xc68
+   __DATA_CONST.__objc_classlist: 0x1e0
+   __DATA_CONST.__objc_catlist: 0x8
+   __DATA_CONST.__objc_protolist: 0x1e0
+   __DATA_CONST.__objc_imageinfo: 0x8
+-  __DATA_CONST.__objc_selrefs: 0x4338
++  __DATA_CONST.__objc_selrefs: 0x4348
+   __DATA_CONST.__objc_protorefs: 0x38
+   __DATA_CONST.__objc_superrefs: 0x130
+   __DATA_CONST.__objc_arraydata: 0x90
+-  __DATA_CONST.__got: 0xa90
+-  __AUTH_CONST.__const: 0xcc8
++  __DATA_CONST.__got: 0xab0
++  __AUTH_CONST.__const: 0xe10
+   __AUTH_CONST.__cfstring: 0x1920
+-  __AUTH_CONST.__objc_const: 0x92a0
++  __AUTH_CONST.__objc_const: 0x9360
+   __AUTH_CONST.__objc_doubleobj: 0x60
+   __AUTH_CONST.__objc_intobj: 0x48
+   __AUTH_CONST.__objc_arrayobj: 0x60
+-  __AUTH_CONST.__auth_got: 0xdb0
+-  __AUTH_CONST.__auth_ptr: 0x3a0
+-  __AUTH.__objc_data: 0xb98
+-  __AUTH.__data: 0x470
++  __AUTH_CONST.__auth_got: 0xe68
++  __AUTH_CONST.__auth_ptr: 0x3c0
++  __AUTH.__objc_data: 0x9e8
++  __AUTH.__data: 0x2e8
+   __DATA.__objc_ivar: 0x418
+-  __DATA.__data: 0x1740
+-  __DATA.__bss: 0xc28
+-  __DATA_DIRTY.__objc_data: 0xac8
+-  __DATA_DIRTY.__data: 0x1c8
+-  __DATA_DIRTY.__bss: 0x260
++  __DATA.__data: 0x1720
++  __DATA.__bss: 0x9e0
++  __DATA_DIRTY.__objc_data: 0xc78
++  __DATA_DIRTY.__data: 0x3f8
++  __DATA_DIRTY.__bss: 0x4b0
+   __DATA_DIRTY.__common: 0x8
+   - /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation
+   - /System/Library/Frameworks/CoreGraphics.framework/CoreGraphics
+
+   - /usr/lib/swift/libswift_Concurrency.dylib
+   - /usr/lib/swift/libswiftos.dylib
+   - /usr/lib/swift/libswiftsimd.dylib
+-  Functions: 2062
+-  Symbols:   3267
+-  CStrings:  368
++  Functions: 2106
++  Symbols:   3285
++  CStrings:  373
+ 
+Symbols:
++ -[SPUISearchHeader selectedItem]
++ -[SPUITextView updateAutoCorrectionBehavior]
++ GCC_except_table34
++ __DATA__TtC19SpotlightUIInternal13MontaraRouter
++ __IVARS__TtC19SpotlightUIInternal13MontaraRouter
++ __METACLASS_DATA__TtC19SpotlightUIInternal13MontaraRouter
++ ___24-[SPUISearchHeader init]_block_invoke
++ _get_witness_table 7SwiftUI15ModifiedContentVyAA4ViewPAAE11buttonStyleyQrqd__AA015PrimitiveButtonG0Rd__lFQOyAA0I0Vy19SpotlightUIInternal08ShowMoreI5Label33_2102EC304E763A420A65D2540E713AF9LLVG_AA05PlainiG0VQo_AA31AccessibilityAttachmentModifierVGAaDHPqd0__AaDHD3_AQHO_AsA0eY0HPyHCHC
++ _swift_release_x28
++ _swift_retain_x28
++ _swift_task_getMainExecutor
++ _swift_task_isCurrentExecutor
++ _symbolic SDySO_____G 19SpotlightUIInternal13MontaraRouterC8Observer33_8346299C1F2044E5C9FB5D5D7D1F52FALLV
++ _symbolic SO3key______5valuet 19SpotlightUIInternal13MontaraRouterC8Observer33_8346299C1F2044E5C9FB5D5D7D1F52FALLV
++ _symbolic SSSbIeghHgd_
++ _symbolic SbSSYaYbc
++ _symbolic _____ 19SpotlightUIInternal13MontaraRouterC
++ _symbolic _____ 19SpotlightUIInternal13MontaraRouterC8Observer33_8346299C1F2044E5C9FB5D5D7D1F52FALLV
++ _symbolic _____Sg 10Foundation6LocaleV
++ _symbolic _____Sg 17SpotlightUIShared9DebouncerC
++ _symbolic _____Sg 19SpotlightUIInternal13MontaraRouterC8Observer33_8346299C1F2044E5C9FB5D5D7D1F52FALLV
++ _symbolic _____SgXw 19SpotlightUIInternal13MontaraRouterC
++ _symbolic _____SgXwz_Xx 19SpotlightUIInternal13MontaraRouterC
++ _symbolic _____ySO_____G s18_DictionaryStorageC 19SpotlightUIInternal13MontaraRouterC8Observer33_8346299C1F2044E5C9FB5D5D7D1F52FALLV
++ _symbolic _____y_____y_____y_____G______Qo______G 7SwiftUI15ModifiedContentV AA4ViewPAAE11buttonStyleyQrqd__AA015PrimitiveButtonG0Rd__lFQO AA0I0V 19SpotlightUIInternal08ShowMoreI5Label33_2102EC304E763A420A65D2540E713AF9LLV AA05PlainiG0V AA31AccessibilityAttachmentModifierV
++ _symbolic yXlSgXw
++ _symbolic ytSg______pIgrzo_ s5ErrorP
++ _type_layout_string 19SpotlightUIInternal13MontaraRouterC8Observer33_8346299C1F2044E5C9FB5D5D7D1F52FALLV
+- -[SPUISearchHeader hasSelectedItem]
+- -[SPUITextView updateAutoCorrectionEnabled:]
+- GCC_except_table33
+- _OBJC_CLASS_$_NSCache
+- __DATA__TtCC19SpotlightUIInternal36SPUIExternalGenerativePartnerManagerP33_A96508C3EE92D1DF1644A8F59FE141E316ProviderSnapshot
+- __IVARS__TtCC19SpotlightUIInternal36SPUIExternalGenerativePartnerManagerP33_A96508C3EE92D1DF1644A8F59FE141E316ProviderSnapshot
+- __METACLASS_DATA__TtCC19SpotlightUIInternal36SPUIExternalGenerativePartnerManagerP33_A96508C3EE92D1DF1644A8F59FE141E316ProviderSnapshot
+- _get_witness_table qd0__7SwiftUI4ViewHD3_AaBPAAE11buttonStyleyQrqd__AA015PrimitiveButtonE0Rd__lFQOyAA0G0Vy19SpotlightUIInternal08ShowMoreG5Label33_2102EC304E763A420A65D2540E713AF9LLVG_AA05PlaingE0VQo_HO
+- _symbolic Say_____G 13CampoServices15MontaraProviderV
+- _symbolic _____ 19SpotlightUIInternal36SPUIExternalGenerativePartnerManagerC16ProviderSnapshot33_A96508C3EE92D1DF1644A8F59FE141E3LLC
+CStrings:
++ "A label displayed below a button that shows more results."
++ "Fatal error"
++ "Incorrect actor executor assumption; Expected same executor as "
++ "ShowResultsButton"
++ "SpotlightUIInternal/MontaraRouter.swift"
++ "query addresses an external provider: %{bool,public}d"
+- "providers"
+```

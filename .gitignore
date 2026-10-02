@@ -1,0 +1,13 @@
+# Multi-GB firmware artifacts — not versioned
+ipsws/
+kernelcaches/
+extracted/
+
+# Ephemeral / scratch
+tmp/
+*.log
+/tmp/
+
+# OS junk
+.DS_Store
+Thumbs.db

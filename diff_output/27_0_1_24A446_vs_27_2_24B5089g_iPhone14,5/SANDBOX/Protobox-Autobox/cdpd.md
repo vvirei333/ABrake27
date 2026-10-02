@@ -1,0 +1,22 @@
+## cdpd
+
+> Group: ⬆️ Updated
+
+```diff
+
+ 		(require-not (global-name "com.apple.rtcreportingd"))
+ 		(require-not (global-name "com.apple.SBUserNotification"))
+ 		(require-not (global-name "com.apple.mobile.usermanagerd.xpc"))
++		(require-not (global-name "com.apple.storagekitd"))
+ 		(require-not (global-name "com.apple.inputservice.keyboardui"))
+ 		(require-not (global-name "com.apple.diagnosticd"))
+ 		(require-not (global-name "com.apple.ak.anisette.xpc"))
+
+ 		mach_exception_raise
+ 		mach_exception_raise_state
+ 		mach_exception_raise_state_identity
++		io_iterator_next
+ 		io_registry_create_iterator
+ 		io_registry_entry_from_path
+ 		io_service_open_extended
+```

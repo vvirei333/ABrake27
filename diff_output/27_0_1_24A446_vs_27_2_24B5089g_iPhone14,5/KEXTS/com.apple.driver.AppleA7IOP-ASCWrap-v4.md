@@ -1,0 +1,12 @@
+## com.apple.driver.AppleA7IOP-ASCWrap-v4
+
+> `com.apple.driver.AppleA7IOP-ASCWrap-v4`
+
+```diff
+
+-342.0.1.0.0
++342.40.2.0.0
+   __TEXT.__cstring: 0x315
+   __TEXT_EXEC.__text: 0x1550
+   __TEXT_EXEC.__auth_stubs: 0x150
+```
