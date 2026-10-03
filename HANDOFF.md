@@ -664,3 +664,50 @@ cd poc && ./build_ipa.sh
 4. После успешного запуска — selector 11, ребут, верификация Developer Mode в Настройках.
 
 ---
+
+### Сессия 9: Lockdown-путь к Developer Mode — ИСЧЕРПАН (без IPA не работает)
+
+**Цель:** включить Developer Mode на iOS 27.2 beta 2 без установки IPA — через протокол lockdown
+(lockdownd ⇄ AMFI / MobileActivation).
+
+**Инструменты:** `pymobiledevice3` 11.20.2, запуск **из хоста** через `flatpak-spawn --host python3`
+(VS Code — Flatpak `com.visualstudio.code`, в песочнице не видно `/run/usbmuxd`).
+
+**Скрипты:** `poc/lockdown_devmode.py`, `poc/probe_amfi_service.py`, `poc/final_verify.py`.
+
+#### Что подтверждено
+
+| Факт | Значение |
+|---|---|
+| Чтение статуса | `get_developer_mode_status()` → домен `com.apple.security.mac.amfi`, ключ `DeveloperModeStatus` → **False** |
+| Чтение (lockdown) | `com.apple.mobile.lockdown/DeveloperModeStatus` → **True** (это *другая* переменная, не dev-mode!) |
+| `set_value` | любой ключ/домен → ответ OK (эхо), но **значение не применяется** (re-read = False) |
+| Причина | `handle_set_value` требует entitlement `com.apple.private.lockdown.finegrained-set` |
+| lockdownd ServiceMap | `com.apple.amfi.lockdown` → `XPCServiceName = com.apple.amfi.lockdown` (реальный XPC-сервис) |
+| lockdownd entitlement | `com.apple.security.exception.sysctl.read-only` = `security.mac.amfi.developer_mode_status` (только **read**) |
+| AMFI XPC-сервис | открывается через `StartService`, но отвечает `{'success': True}` на **ЛЮБОЙ** payload — включая мусорный запрос `zzz-not-a-real-request-zzz` |
+| Вывод | это generic-ack, сервис **не разбирает** наш запрос; управляющего канала нет |
+
+#### Вердикт
+
+**Lockdown-протокол не даёт записи Developer Mode без entitlement.**
+Единственный живой путь — `com.apple.amfi.lockdown` — возвращает заглушку и на чтение, и на запись.
+
+- `armSecurityBootMode` (kernel selector 11) **недоступен** через lockdown.
+- Единственный оставшийся путь — **выполнить код на устройстве** с entitlement
+  `com.apple.private.amfi.developer-mode-control` (см. Сессии 6–8: selector 11 + ребут).
+- Варианты активации бинарника: TrollStore (iOS ≤17.0) или SideStore/AltStore с anisette-сервером.
+
+#### Артефакты
+
+- `/tmp/cline/lock_strings.txt` — все строки lockdownd.
+- `/tmp/cline/lockdownd_ent.xml` — entitlements lockdownd (parsed, валидны).
+- `/tmp/cline/run_devmode2.txt`, `run_probe.txt`, `run_final.txt` — логи прогонов.
+
+#### Воспроизведение
+
+```bash
+cd poc
+flatpak-spawn --host python3 final_verify.py
+```
+
