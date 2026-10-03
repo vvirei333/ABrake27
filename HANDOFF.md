@@ -1,5 +1,5 @@
 # HANDOFF — iPhone iOS 27.0 vs 27.2 diff / AMFI dev-mode PoC
-> Дата последнего обновления: сессия 12 (2026-10-03).
+> Дата последнего обновления: сессия 13 (2026-10-03).
 
 ## Что это
 
@@ -982,4 +982,119 @@ read:   0xfffffff00a3bb994  bl 0xfffffff00a3b10fc   ; 2-й vm_map_get_upl
 > **Оговорка:** это подтверждает отсутствие ре-чека **на уровне VFS**; вопрос эксплуатируемости
 > зависит от того, не закрыт ли баг внутри `vm_map_get_upl`/`upl_phys_page` («Следующие шаги» п.1),
 > поэтому формулировка «готов к эксплуатации» пока НЕ утверждается.
+
+### Сессия 14: xrefs для cluster_*_contig
+
+Инструмент: `tools/ghidra_find_string.py` (Ghidra headless / PyGhidra, Jython-стиль
+GhidraScript: `getScriptArgs()` → `getListing().getDefinedData()` → `getReferencesTo()`,
+метаданные через `getFunctionContaining()`). Запуск — `ghidra_venv` + `pyghidra.run_script`
+против готового проекта `ghidra_proj/amfi_stable` (`analyze=False`, variant=stable,
+build 24A446 iPhone14,5; реанализ не выполнялся). Сырой вывод:
+`/tmp/xrefs_write.txt`, `/tmp/xrefs_read.txt`.
+
+| String | String_Addr | Xref_From | Function_Name | Func_Entry |
+|---|---|---|---|---|
+| cluster_write_contig | fffffff00705d9bc | fffffff00a3b5458 | FUN_fffffff00a3b4eec | fffffff00a3b4eec |
+| cluster_write_contig | fffffff00705d9bc | fffffff00a3b5284 | FUN_fffffff00a3b4eec | fffffff00a3b4eec |
+| cluster_read_contig  | fffffff00705db89 | fffffff00a3bbac4 | FUN_fffffff00a3bb550 | fffffff00a3bb550 |
+| cluster_read_contig  | fffffff00705db89 | fffffff00a3bb91c | FUN_fffffff00a3bb550 | fffffff00a3bb550 |
+
+Метаданные функций-читателей (`getFunctionAt`/`getFunctionContaining`):
+
+| Function_Name | Entry | Size (bytes) | Instructions |
+|---|---|---|---|
+| FUN_fffffff00a3b4eec | fffffff00a3b4eec | 1776 | 444 |
+| FUN_fffffff00a3bb550 | fffffff00a3bb550 | 1864 | 466 |
+
+### Сессия 16: Карта IOKit user clients — externalMethod attack surface (stable)
+
+**Цель:** attack-surface analysis — перечислить публичные IOKit user clients и их
+syscall-reachable entry points (`externalMethod`) в `ghidra_proj/amfi_stable`
+(build 24A446 iPhone14,5). Инструменты — PyGhidra против готового проекта,
+`analyze=False`, реанализ не выполнялся.
+
+**Важно про kernelcache:** это merged cache (норма для iOS 17+) — сегментов
+`__PRELINK_*` нет, prelink-kext'ы вложены в обычный `__TEXT`; строки — в секции
+`__cstring`. Имена блоков в Ghidra здесь — имена *секций*, не сегментов.
+
+#### Перечисление (tools/ghidra_find_userclients.py, ghidra_find_external_methods.py)
+- 289 строк `virtual IOReturn …` (прототипы методов IOUserClient-подклассов).
+- Фильтр по syscall-entry-маркерам: `::externalMethod` ×9, `::clientClose` ×10,
+  `::clientMemoryForType` ×4, `::initWithTask` ×0, `::start` ×4 (последний
+  over-match: ловит `startChannel/startCPUWithOptions/...`, не `IOService::start`).
+- **18 уникальных классов.** CSV: `/tmp/userclients.csv`, `/tmp/external_methods.csv`.
+- Замечание: xref строки-прототипа ≠ externalMethod. Напр. `CoreAnalyticsUserClient`
+  даёт 84-байтный логирующий stub «bad selector», а не диспетчер. Надёжный признак
+  реального externalMethod — механизм диспетчеризации (ниже), не строка.
+
+#### Диспетчерские паттерны (tools/ghidra_resolve_vtable.py)
+Два вида в этом кэше:
+- (A) inline: `if (sel < N) { e=&TABLE[sel*0x18]; call через vtable[+0x550] }`
+  (AMFI, DIDeviceCreator).
+- (B) helper: tail-call общего `dispatchExternalMethod` (`FUN_fffffff00a98c774`)
+  с аргументами `(&TABLE, count)` (AppleSmartIO).
+
+| class | externalMethod entry | table_va | selectors | статус |
+|---|---|---|---|---|
+| AppleMobileFileIntegrityUserClient | fffffff008e8a6e8 | fffffff007e6c3a8 | 18 (`sel<0x12`) | ✓ resolved |
+| AppleSmartIOUserClient | fffffff00929ea6c | fffffff007f070f8 | 4 | ✓ resolved |
+| AppleSEPUserClient | — | — | ~40 (из strings) | ✗ не resolved (PAC) |
+
+CSV: `/tmp/external_methods_resolved.csv`.
+
+**AMFI cross-check с Сессией 6:** структура подтверждена в stable — записи
+IOExternalMethodDispatch по 24 байта (`sel*0x18`), bound-check = число селекторов,
+вызов базового диспетчера через слот vtable `+0x550`, PAC-auth указателя записи,
+на неизвестный селектор — `0xe00002c7` (kIOReturnUnsupported). Таблица @
+`fffffff007e6c3a8`, 18 записей. ✓
+
+**SmartIO:** `externalMethod` логирует «ASIO: user client externalMethod: selector %d»
+и делегирует в `dispatchExternalMethod(this, sel, args, &fffffff007f070f8, 4, this, 0)`.
+4 селектора = `_extForcePanic / _extPing / _extResetPerf / _extQueryPerf`.
+
+**SEP — НЕ resolved:** externalMethod не inline-`+0x550` и не входит в 54 вызывающих
+`dispatchExternalMethod`; указатели диспетч-таблицы — arm64e **PAC-signed**, поэтому
+raw `findBytes` и `getLong` не дают чистые адреса записей, а кластеризация по шагу
+0x18 фрагментируется (null/наследуемые слоты). Из строк извлечено ~40 обработчиков
+`static IOReturn AppleSEPUserClient::Dispatch…(AppleSEPUserClient*, void*, IOExternalMethodArguments*)`
+(LoadFirmware, CommitHash, GenerateNonceAndSlot, Get/SetART, EraseAllContentAndSettings,
+семейство Hilo*, Lynx*, DynamicObjectOp, …). **Needs Ghidra GUI walk** (или PAC-strip
+pass) — идти от `AppleSEPUserClient::externalMethod` по adrp/add к таблице. Это самая
+богатая поверхность (загрузка прошивки / EACS), доделывать аккуратно.
+
+#### Артефакты / инструменты
+- `tools/ghidra_find_userclients.py` — все 289 строк + xrefs.
+- `tools/ghidra_find_external_methods.py` — фильтр syscall-entry + группировка по классам.
+- `tools/ghidra_resolve_vtable.py` — resolve externalMethod entry/table/count (паттерны A/B).
+- CSV: `/tmp/userclients.csv`, `/tmp/external_methods.csv`, `/tmp/external_methods_resolved.csv`.
+
+#### Следующие шаги
+- SEP: добавить PAC-strip (`ptr & 0xffffffff | 0xfffffff000000000`) перед кластеризацией
+  записей и повторить headless; иначе GUI-walk от externalMethod.
+- Декодировать SmartIO-таблицу (4 записи) и проверить хендлеры на memcpy с user-size /
+  copyin без bounds-check.
+- Диф поверхности externalMethod stable ↔ beta.
+
+#### Сессия 16 (продолжение): stride, SmartIO decode, SEP PAC-strip, AMFI parsers
+
+**Формат записи таблицы — stride зависит от паттерна (НЕ универсален):**
+- `0x18` = `IOExternalMethodDispatch` (ptr + 4×u32, компактный) → **AMFI, DIDeviceCreator** (inline `+0x550`).
+- `0x28` = `IOExternalMethodDispatch2` (ptr + 4×u32 + 16 reserved) → **SmartIO** (helper `dispatchExternalMethod`).
+- `tools/ghidra_resolve_vtable.py` теперь авто-детектит stride (`detect_stride()` — скоринг по числу слотов, попадающих на реальный text-ptr) + `pac_strip()` + `decode_table()`.
+- Ghidra loader уже резолвит chained fixups → `getLong()` даёт финальный VA. Формула `base + (raw & 0xffffffff)` даёт двойной счёт — НЕ использовать; для PAC-slots только `pac_strip` нормализует старшие биты.
+
+**SmartIO декодирован (4 селектора) — attack surface пустой:** `/tmp/smartio_dispatch.csv`, `/tmp/smartio_h_{0..3}.c`. У всех `in_scalar=in_struct=0` (нет копирования ИЗ userspace), единственный memcpy — константные `0x988` байт в framework-валидированный output-буфер (_extQueryPerf). Клиент debug/entitlement-gated. Не цель.
+
+**AMFI re-verified (stride 0x18, 18 записей):** 13/18 → реальные хендлеры `FUN_fffffff008e8a788…b198`, 5 — NULL/unimplemented. Три селектора с `structIn=0xffffffff` (user-sized):
+- sel 5 `loadCompilationServiceCodeDirectoryHash` @ `fffffff008e8a9f8`
+- sel 6 `isCdhashInTrustCache` @ `fffffff008e8ab80`
+- sel 9 `setDenylist` @ `fffffff008e8acb4`
+
+**Copy — SAFE (гипотеза OOB не подтвердилась):** `/tmp/amfi_interesting.csv`, `/tmp/amfi_sel_{5,6,9}.c`, `/tmp/amfi_copyBytesFromInputArguments.c`.
+- sel 5/6 гонят user-данные через общий `copyBytesFromInputArguments` (`FUN_fffffff008e8b1b8`): **кап `structInputSize > 0x10000000` (256 МБ)** в обоих путях (inline и memory-descriptor), `IOMalloc(size)` + memcpy ровно `size` — без overflow.
+- sel 9 валидирует `count*0x20 == structInputSize` при `count < 2^59` ⇒ `count ≤ 2^27`, overflow невозможен.
+- sel 6 — единственный БЕЗ entitlement-gate (read-only запрос trust-cache) → самая доступная точка до копирующего кода.
+- **Классика: bounded copy + возможно unbounded parser.** Следующая цель — пост-копи парсеры: `FUN_fffffff008e98ad4` (sel5 cdhash), `FUN_fffffff008e97888` (sel6 trust-cache), `FUN_fffffff008e9e650` (sel9 denylist, count×32). → анализ в Сессии 17.
+
+**SEP — PAC-strip сработал, но НЕ resolved (нужен GUI):** `pac_strip` (`0xfffffff000000000 | (q & 0xffffffff)`) открыл +77 указателей (621 vs 544 clean). Кандидат-таблица `@ fffffff007ec77d0` (stride 0x18, ≥31 записей, counts похожи на dispatch — несколько `structIn=0xffffffff`, фикс `structOut` 20/176/64). Но: нет xref на базу (externalMethod берёт её через adrp/add), Ghidra слила хендлеры 4–25 в один блоб `FUN_fffffff009168a84`, а единственная ссылающаяся на таблицу функция (`FUN_fffffff009185cd4`) — конструктор, не externalMethod. CSV (unconfirmed): `/tmp/sep_dispatch.csv`. Известные хендлеры с xref: InvalidateNonce `FUN_fffffff009167744`, GenerateNonceAndSlot `FUN_fffffff009169de8`, DynamicObjectOp `FUN_fffffff009169d1c`. Прото-строка externalMethod `@ fffffff0076c7265` (0 xref). **Needs Ghidra GUI walk.**
 
