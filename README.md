@@ -178,6 +178,33 @@ the force-enabled debug bridge, the `IOExternalMethodDispatch` table decode, and
 
 ---
 
+## Support the Research 💎
+
+**ABrake27 is built by a 17-year-old independent developer — no Mac hardware, no corporate
+funding, no Silicon Valley backing.** Every kernel diff, every dispatch-table decode, and
+every line of the cross-compiler was written from a Linux laptop in a bedroom, fueled by
+nothing but caffeine and obsession.
+
+If this project helps you understand iOS security, enables your own research, or brings us
+one step closer to a **TrollStore-style alternative for iOS 27** — consider throwing a few
+satoshis my way. Even a coffee-tier donation keeps the diff engine running.
+
+### Crypto Wallets (anonymous)
+
+**TON (Telegram Wallet / Jetpack):**
+```
+UQ_PLACEHOLDER_TON_ADDRESS_DO_NOT_SIGN_YET
+```
+
+**USDT (TRC-20):**
+```
+T_PLACEHOLDER_USDT_TRC20_ADDRESS_DO_NOT_SIGN_YET
+```
+
+> 🛡️ *All donations are anonymous on-chain. No KYC, no tracking — just pure crypto solidarity.*
+
+---
+
 ## License
 
 This project is for **educational and security research purposes only**.  
