@@ -1,0 +1,6 @@
+/usr/bin/zsign
+version: 1.1.1
+---
+which: no jtool2 in (/home/ivan/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/opt/android-sdk/emulator:/opt/android-ndk:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/var/lib/flatpak/exports/bin:/usr/lib/jvm/default/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl:/usr/lib/rustup/bin:/opt/android-sdk/emulator:/opt/android-ndk:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools)
+which: no codesign in (/home/ivan/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/opt/android-sdk/emulator:/opt/android-ndk:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/var/lib/flatpak/exports/bin:/usr/lib/jvm/default/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl:/usr/lib/rustup/bin:/opt/android-sdk/emulator:/opt/android-ndk:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools)
+/usr/bin/zsign

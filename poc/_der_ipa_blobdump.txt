@@ -1,0 +1,42 @@
+[macho] file=/tmp/_ader/Payload/EnableAMFIDevMode.app/EnableAMFIDevMode size=52688 endian=< ncmds=20
+[LC_CODE_SIGNATURE] offset=50944 size=1744
+  raw head:
+    +0000: fa de 0c c0 00 00 04 2f 00 00 00 03 00 00 00 00 ......./........
+    +0010: 00 00 00 24 00 00 00 02 00 00 03 1b 00 00 00 07 ...$............
+    +0020: 00 00 03 27 fa de 0c 02 00 00 02 f7 00 02 04 00 ...'............
+    +0030: 00 00 00 02 00 00 01 57 00 00 00 58 00 00 00 07 .......W...X....
+    ... (1680 more bytes)
+[superblob] magic=0xfade0cc0 (CSMAGIC_EMBEDDED_SIGNATURE (superblob)) length=1071 count=3
+  index[0] type=0x00000000 (CSSLOT_CODEDIRECTORY) offset=36 (0x24)
+  index[1] type=0x00000002 (CSSLOT_REQUIREMENTS) offset=795 (0x31b)
+  index[2] type=0x00000007 (CSSLOT_DER_ENTITLEMENTS) offset=807 (0x327)
+
+=== blob[0] slot=0x0000 (CSSLOT_CODEDIRECTORY) offset=36 magic=0xfade0c02 (CSMAGIC_CODEDIRECTORY) len=759
+    CodeDirectory version=0x20400
+    +0024: fa de 0c 02 00 00 02 f7 00 02 04 00 00 00 00 02 ................
+    +0034: 00 00 01 57 00 00 00 58 00 00 00 07 00 00 00 0d ...W...X........
+    +0044: 00 00 c7 00 20 02 00 0c 00 00 00 00 00 00 00 00 .... ...........
+    +0054: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ................
+    +0064: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 00 ................
+    +0074: 00 00 00 00 00 00 00 01 63 6f 6d 2e 72 65 73 65 ........com.rese
+    +0084: 61 72 63 68 2e 65 6e 61 62 6c 65 61 6d 66 69 64 arch.enableamfid
+    +0094: 65 76 6d 6f 64 65 00 ff 2c 95 83 3d 38 cb 5a 5f evmode..,..=8.Z_
+    ... (631 more bytes)
+
+=== blob[1] slot=0x0002 (CSSLOT_REQUIREMENTS) offset=795 magic=0xfade0c01 (CSMAGIC_REQUIREMENT) len=12
+    +031b: fa de 0c 01 00 00 00 0c 00 00 00 00             ............
+
+=== blob[2] slot=0x0007 (CSSLOT_DER_ENTITLEMENTS) offset=807 magic=0xfade7172 (CSMAGIC_DER_ENTITLEMENTS) len=264
+    +0327: fa de 71 72 00 00 01 08 70 81 fd 02 01 01 b0 81 ..qr....p.......
+    +0337: f7 30 30 0c 2b 63 6f 6d 2e 61 70 70 6c 65 2e 70 .00.+com.apple.p
+    +0347: 72 69 76 61 74 65 2e 61 6d 66 69 2e 63 61 6e 2d rivate.amfi.can-
+    +0357: 6c 6f 61 64 2d 74 72 75 73 74 2d 63 61 63 68 65 load-trust-cache
+    +0367: 01 01 ff 30 32 0c 2d 63 6f 6d 2e 61 70 70 6c 65 ...02.-com.apple
+    +0377: 2e 70 72 69 76 61 74 65 2e 61 6d 66 69 2e 64 65 .private.amfi.de
+    +0387: 76 65 6c 6f 70 65 72 2d 6d 6f 64 65 2d 63 6f 6e veloper-mode-con
+    +0397: 74 72 6f 6c 01 01 ff 30 74 0c 2a 63 6f 6d 2e 61 trol...0t.*com.a
+    ... (136 more bytes)
+    --- payload as text ---
+p�����00+com.apple.private.amfi.can-load-trust-cache�02-com.apple.private.amfi.developer-mode-control�0t*com.apple.security.iokit-user-client-class0F"AppleMobileFileIntegrityUserClient AppleCredentialManagerUserClient0platform-application�
+
+[tail padding] region ends at 1744, superblob len=1071, pad=673 bytes

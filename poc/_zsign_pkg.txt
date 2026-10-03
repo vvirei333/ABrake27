@@ -1,0 +1,22 @@
+Установлен из        : Нет
+Название             : zsign-bin
+Версия               : 1.1.1-1
+Описание             : Fast cross-platform iOS code signing tool — codesign alternative without Xcode/macOS
+Архитектура          : x86_64
+URL                  : https://github.com/zhlynn/zsign
+Лицензии             : MIT
+Группы               : Нет
+Предоставляет        : zsign
+Зависит от           : openssl  gcc-libs
+Доп. зависимости     : Нет
+Требуется            : Нет
+Опционально для      : Нет
+Конфликтует с        : zsign
+Заменяет             : Нет
+Установленный размер : 527,42 KiB
+Сборщик              : Unknown Packager
+Дата сборки          : Сб 03 окт 2026 02:42:18
+Дата установки       : Сб 03 окт 2026 02:42:24
+Причина установки    : Явно установлен
+===
+version: 1.1.1

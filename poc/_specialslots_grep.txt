@@ -1,0 +1,19 @@
+356:	vector<uint8_t*> arrSpecialSlots;
+363:		arrSpecialSlots.push_back(pHashes - cdHeader.hashSize * (i + 1));
+424:		ZSHA::Print("\t\t\t", arrSpecialSlots[i], cdHeader.hashSize, suffix);
+498:	vector<string> arrSpecialSlots;
+501:		arrSpecialSlots.push_back(strDerEntitlementsSlotSHA.empty() ? strEmptySHA : strDerEntitlementsSlotSHA);
+502:		arrSpecialSlots.push_back(strEmptySHA);
+504:	arrSpecialSlots.push_back(strEntitlementsSlotSHA.empty() ? strEmptySHA : strEntitlementsSlotSHA);
+505:	arrSpecialSlots.push_back(strEmptySHA);
+506:	arrSpecialSlots.push_back(strCodeResourcesSHA.empty() ? strEmptySHA : strCodeResourcesSHA);
+507:	arrSpecialSlots.push_back(strRequirementsSlotSHA.empty() ? strEmptySHA : strRequirementsSlotSHA);
+508:	arrSpecialSlots.push_back(strInfoPlistSHA.empty() ? strEmptySHA : strInfoPlistSHA);
+510:	// Trailing entries whose hash == strEmptySHA in `arrSpecialSlots` can be omitted; erase them.
+513:	// Note that in `arrSpecialSlots` is reversed and trailing elements appear at front.
+514:	auto itLastUsedSpecialSlot = std::find_if(arrSpecialSlots.begin(), arrSpecialSlots.end(),
+516:	if (itLastUsedSpecialSlot != arrSpecialSlots.begin()) {
+517:		arrSpecialSlots.erase(arrSpecialSlots.begin(), itLastUsedSpecialSlot);
+544:	uint32_t uSpecialSlotsLength = (uint32_t)arrSpecialSlots.size() * cdHeader.hashSize;
+558:	cdHeader.nSpecialSlots = BE((uint32_t)arrSpecialSlots.size());
+583:		strOutput.append(arrSpecialSlots[i].data(), arrSpecialSlots[i].size());

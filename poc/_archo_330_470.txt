@@ -1,0 +1,141 @@
+	const string& strInfoSHA1, 
+	const string& strInfoSHA256, 
+	const string& strCodeResourcesSHA1, 
+	const string& strCodeResourcesSHA256, 
+	string& strOutput)
+{
+	string strRequirementsSlot;
+	string strEntitlementsSlot;
+	string strDerEntitlementsSlot;
+
+	string strEmptyEntitlements = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict/>\n</plist>\n";
+	ZSign::SlotBuildRequirements(strBundleId, pSignAsset->m_strSubjectCN, strRequirementsSlot);
+	ZSign::SlotBuildEntitlements(IsExecute() ? pSignAsset->m_strEntitleData : strEmptyEntitlements, strEntitlementsSlot);
+	ZSign::SlotBuildDerEntitlements(IsExecute() ? pSignAsset->m_strEntitleData : "", strDerEntitlementsSlot);
+
+	string strRequirementsSlotSHA1;
+	string strRequirementsSlotSHA256;
+	if (strRequirementsSlot.empty()) { //empty
+		strRequirementsSlotSHA1.append(20, 0);
+		strRequirementsSlotSHA256.append(32, 0);
+	} else {
+		ZSHA::SHA(strRequirementsSlot, strRequirementsSlotSHA1, strRequirementsSlotSHA256);
+	}
+
+	string strEntitlementsSlotSHA1;
+	string strEntitlementsSlotSHA256;
+	if (strEntitlementsSlot.empty()) { //empty
+		strEntitlementsSlotSHA1.append(20, 0);
+		strEntitlementsSlotSHA256.append(32, 0);
+	} else {
+		ZSHA::SHA(strEntitlementsSlot, strEntitlementsSlotSHA1, strEntitlementsSlotSHA256);
+	}
+
+	string strDerEntitlementsSlotSHA1;
+	string strDerEntitlementsSlotSHA256;
+	if (strDerEntitlementsSlot.empty()) { //empty
+		strDerEntitlementsSlotSHA1.append(20, 0);
+		strDerEntitlementsSlotSHA256.append(32, 0);
+	} else {
+		ZSHA::SHA(strDerEntitlementsSlot, strDerEntitlementsSlotSHA1, strDerEntitlementsSlotSHA256);
+	}
+
+	uint8_t* pCodeSlots1Data = NULL;
+	uint8_t* pCodeSlots256Data = NULL;
+	uint32_t uCodeSlots1DataLength = 0;
+	uint32_t uCodeSlots256DataLength = 0;
+	if (!bForce) {
+		ZSign::GetCodeSignatureExistsCodeSlotsData(m_pSignBase, pCodeSlots1Data, uCodeSlots1DataLength, pCodeSlots256Data, uCodeSlots256DataLength);
+	}
+
+	uint64_t uExecSegFlags = 0;
+	if (MH_EXECUTE == m_uFileType) {
+		// MAIN_BINARY must be set on the main executable for any signature flavour
+		// (ad-hoc, single-binary, or full CMS). Without it, codesign --verify on
+		// macOS rejects the signature as "invalid".
+		uExecSegFlags = CS_EXECSEG_MAIN_BINARY;
+	}
+
+	// ALLOW_UNSIGNED is a development-only flag. It must be set *only* when
+	// get-task-allow is actually true (debug build), not merely present in
+	// the entitlements plist. Distribution profiles include
+	// <key>get-task-allow</key><false/> and must keep this flag cleared -- Apple
+	// codesign never sets ALLOW_UNSIGNED for such signatures.
+	if (!strEntitlementsSlot.empty()) {
+		const char* pEnt = strEntitlementsSlot.data() + 8; // skip blob header
+		const char* pKey = strstr(pEnt, "<key>get-task-allow</key>");
+		if (NULL != pKey) {
+			const char* pTrue  = strstr(pKey, "<true/>");
+			const char* pFalse = strstr(pKey, "<false/>");
+			if (NULL != pTrue && (NULL == pFalse || pTrue < pFalse)) {
+				uExecSegFlags |= CS_EXECSEG_ALLOW_UNSIGNED;
+			}
+		}
+	}
+
+	string strCodeDirectorySlot;
+	string strAltnateCodeDirectorySlot;
+	if (!pSignAsset->m_bSHA256Only) {
+		if (!ZSign::SlotBuildCodeDirectory(false,
+			m_pBase,
+			m_uCodeLength,
+			pCodeSlots1Data,
+			uCodeSlots1DataLength,
+			s_uExecSegLimit,
+			uExecSegFlags,
+			strBundleId,
+			pSignAsset->m_strTeamId,
+			strInfoSHA1,
+			strRequirementsSlotSHA1,
+			strCodeResourcesSHA1,
+			strEntitlementsSlotSHA1,
+			strDerEntitlementsSlotSHA1,
+			IsExecute(),
+			pSignAsset->m_bAdhoc,
+			strCodeDirectorySlot)) {
+			ZLog::Error(">>> Build SHA1 CodeDirectory failed!\n");
+			return false;
+		}
+	}
+
+	if (!ZSign::SlotBuildCodeDirectory(true,
+		m_pBase,
+		m_uCodeLength,
+		pCodeSlots256Data,
+		uCodeSlots256DataLength,
+		s_uExecSegLimit,
+		uExecSegFlags,
+		strBundleId,
+		pSignAsset->m_strTeamId,
+		strInfoSHA256,
+		strRequirementsSlotSHA256,
+		strCodeResourcesSHA256,
+		strEntitlementsSlotSHA256,
+		strDerEntitlementsSlotSHA256,
+		IsExecute(),
+		pSignAsset->m_bAdhoc,
+		strAltnateCodeDirectorySlot)) {
+		ZLog::Error(">>> Build SHA256 CodeDirectory failed!\n");
+		return false;
+	}
+	if (pSignAsset->m_bSHA256Only) {
+		// SHA256-based code directory is usually the alternate; however, make it the primary (and only)
+		// code directory if `m_bUseSHA256Only == true`.
+		strAltnateCodeDirectorySlot.swap(strCodeDirectorySlot);
+	}
+
+	string strCMSSignatureSlot;
+	if (!pSignAsset->m_bAdhoc) { //adhoc remove cms signature slot
+		if (!ZSign::SlotBuildCMSSignature(pSignAsset, strCodeDirectorySlot, strAltnateCodeDirectorySlot, strCMSSignatureSlot)) {
+			ZLog::Error(">>> Build CMS signature failed!\n");
+			return false;
+		}
+	}
+
+	uint32_t uCodeDirectorySlotLength = (uint32_t)strCodeDirectorySlot.size();
+	uint32_t uRequirementsSlotLength = (uint32_t)strRequirementsSlot.size();
+	uint32_t uEntitlementsSlotLength = (uint32_t)strEntitlementsSlot.size();
+	uint32_t uDerEntitlementsLength = (uint32_t)strDerEntitlementsSlot.size();
+	uint32_t uAltnateCodeDirectorySlotLength = (uint32_t)strAltnateCodeDirectorySlot.size();
+	uint32_t uCMSSignatureSlotLength = (uint32_t)strCMSSignatureSlot.size();
+

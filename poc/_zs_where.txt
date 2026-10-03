@@ -1,0 +1,43 @@
+src/signing.h:9:	static bool SlotBuildEntitlements(const string& strEntitlements, string& strOutput);
+src/signing.h:10:	static bool SlotBuildDerEntitlements(const string& strEntitlements, string& strOutput);
+src/signing.h:12:	static bool SlotBuildCodeDirectory(bool bAlternate,
+src/signing.cpp:297:bool ZSign::SlotBuildEntitlements(const string& strEntitlements, string& strOutput)
+src/signing.cpp:314:bool ZSign::SlotBuildDerEntitlements(const string& strEntitlements, string& strOutput)
+src/signing.cpp:362:	for (uint32_t i = 0; i < LE(cdHeader.nSpecialSlots); i++) {
+src/signing.cpp:370:	ZLog::PrintV("\tnSpecialSlots: \t%u\n", LE(cdHeader.nSpecialSlots));
+src/signing.cpp:402:	for (int i = LE(cdHeader.nSpecialSlots) - 1; i >= 0; i--) {
+src/signing.cpp:449:bool ZSign::SlotBuildCodeDirectory(bool bAlternate,
+src/signing.cpp:482:	cdHeader.nSpecialSlots = 0;
+src/signing.cpp:558:	cdHeader.nSpecialSlots = BE((uint32_t)arrSpecialSlots.size());
+src/signing.cpp:582:	for (uint32_t i = 0; i < LE(cdHeader.nSpecialSlots); i++) {
+src/signing.cpp:746:	CS_SuperBlob* psb = (CS_SuperBlob*)pCSBase;
+src/signing.cpp:747:	if (NULL != psb && CSMAGIC_EMBEDDED_SIGNATURE == LE(psb->magic)) {
+src/signing.cpp:755:	CS_SuperBlob* psb = (CS_SuperBlob*)pCSBase;
+src/signing.cpp:756:	if (NULL == psb || CSMAGIC_EMBEDDED_SIGNATURE != LE(psb->magic)) {
+src/signing.cpp:765:	CS_BlobIndex* pbi = (CS_BlobIndex*)(pCSBase + sizeof(CS_SuperBlob));
+src/signing.cpp:827:	CS_SuperBlob* psb = (CS_SuperBlob*)pCSBase;
+src/signing.cpp:828:	if (NULL == psb || CSMAGIC_EMBEDDED_SIGNATURE != LE(psb->magic)) {
+src/signing.cpp:832:	CS_BlobIndex* pbi = (CS_BlobIndex*)(pCSBase + sizeof(CS_SuperBlob));
+src/common/mach-o.h:458:	CSMAGIC_EMBEDDED_SIGNATURE = 0xfade0cc0, /* embedded form of signature data */
+src/common/mach-o.h:459:	CSMAGIC_EMBEDDED_SIGNATURE_OLD = 0xfade0b02,	/* XXX */
+src/common/mach-o.h:541: * Structure of an embedded-signature SuperBlob
+src/common/mach-o.h:548:struct CS_SuperBlob {
+src/common/mach-o.h:550:	uint32_t length;				/* total length of SuperBlob */
+src/common/mach-o.h:566:	uint32_t nSpecialSlots;			/* number of special hash slots */
+src/certcheck.cpp:336:		CS_SuperBlob* psb = (CS_SuperBlob*)archo.m_pSignBase;
+src/certcheck.cpp:337:		if (CSMAGIC_EMBEDDED_SIGNATURE == LE(psb->magic)) {
+src/certcheck.cpp:338:			CS_BlobIndex* pbi = (CS_BlobIndex*)(archo.m_pSignBase + sizeof(CS_SuperBlob));
+src/archo.cpp:342:	ZSign::SlotBuildEntitlements(IsExecute() ? pSignAsset->m_strEntitleData : strEmptyEntitlements, strEntitlementsSlot);
+src/archo.cpp:343:	ZSign::SlotBuildDerEntitlements(IsExecute() ? pSignAsset->m_strEntitleData : "", strDerEntitlementsSlot);
+src/archo.cpp:408:		if (!ZSign::SlotBuildCodeDirectory(false,
+src/archo.cpp:430:	if (!ZSign::SlotBuildCodeDirectory(true,
+src/archo.cpp:479:	uint32_t uSuperBlobHeaderLength = sizeof(CS_SuperBlob) + uCodeSignBlobCount * sizeof(CS_BlobIndex);
+src/archo.cpp:480:	uint32_t uCodeSignLength = uSuperBlobHeaderLength +
+src/archo.cpp:492:		blob.offset = BE(uSuperBlobHeaderLength);
+src/archo.cpp:499:		blob.offset = BE(uSuperBlobHeaderLength + uCodeDirectorySlotLength);
+src/archo.cpp:506:		blob.offset = BE(uSuperBlobHeaderLength + uCodeDirectorySlotLength + uRequirementsSlotLength);
+src/archo.cpp:513:		blob.offset = BE(uSuperBlobHeaderLength + uCodeDirectorySlotLength + uRequirementsSlotLength + uEntitlementsSlotLength);
+src/archo.cpp:520:		blob.offset = BE(uSuperBlobHeaderLength + uCodeDirectorySlotLength + uRequirementsSlotLength + uEntitlementsSlotLength + uDerEntitlementsLength);
+src/archo.cpp:527:		blob.offset = BE(uSuperBlobHeaderLength + uCodeDirectorySlotLength + uRequirementsSlotLength + uEntitlementsSlotLength + uDerEntitlementsLength + uAltnateCodeDirectorySlotLength);
+src/archo.cpp:531:	CS_SuperBlob superblob;
+src/archo.cpp:532:	superblob.magic = BE((uint32_t)CSMAGIC_EMBEDDED_SIGNATURE);

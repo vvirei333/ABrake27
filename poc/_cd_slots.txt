@@ -1,0 +1,161 @@
+			ZFile::WriteFile("./.zsign_debug/CodeDirectory_SHA1.slot", (const char*)pSlotBase, uSlotLength);
+		} else if (2 == cdHeader.hashType) {
+			ZFile::WriteFile("./.zsign_debug/CodeDirectory_SHA256.slot", (const char*)pSlotBase, uSlotLength);
+		}
+	}
+
+	return true;
+}
+
+bool ZSign::SlotBuildCodeDirectory(bool bAlternate,
+	uint8_t* pCodeBase,
+	uint32_t uCodeLength,
+	uint8_t* pCodeSlotsData,
+	uint32_t uCodeSlotsDataLength,
+	uint64_t execSegLimit,
+	uint64_t execSegFlags,
+	const string& strBundleId,
+	const string& strTeamId,
+	const string& strInfoPlistSHA,
+	const string& strRequirementsSlotSHA,
+	const string& strCodeResourcesSHA,
+	const string& strEntitlementsSlotSHA,
+	const string& strDerEntitlementsSlotSHA,
+	bool isExecuteArch,
+	bool isAdhoc,
+	string& strOutput)
+{
+	strOutput.clear();
+	if (NULL == pCodeBase || uCodeLength <= 0 || strBundleId.empty() || (strTeamId.empty() && !isAdhoc)) {
+		return false;
+	}
+
+	uint32_t uVersion = 0x20400;
+
+	CS_CodeDirectory cdHeader;
+	memset(&cdHeader, 0, sizeof(cdHeader));
+	cdHeader.magic = BE((uint32_t)CSMAGIC_CODEDIRECTORY);
+	cdHeader.length = 0;
+	cdHeader.version = BE(uVersion);
+	cdHeader.flags = isAdhoc ? BE(static_cast<uint32_t>(CS_SEC_CODESIGNATURE_ADHOC)) : 0U;
+	cdHeader.hashOffset = 0;
+	cdHeader.identOffset = 0;
+	cdHeader.nSpecialSlots = 0;
+	cdHeader.nCodeSlots = 0;
+	cdHeader.codeLimit = BE(uCodeLength);
+	cdHeader.hashSize = bAlternate ? 32 : 20;
+	cdHeader.hashType = bAlternate ? 2 : 1;
+	cdHeader.spare1 = 0;
+	cdHeader.pageSize = 12;
+	cdHeader.spare2 = 0;
+	cdHeader.scatterOffset = 0;
+	cdHeader.teamOffset = 0;
+	cdHeader.execSegBase = 0;
+	cdHeader.execSegLimit = BE(execSegLimit);
+	cdHeader.execSegFlags = BE(execSegFlags);
+
+	string strEmptySHA;
+	strEmptySHA.append(cdHeader.hashSize, 0);
+	vector<string> arrSpecialSlots;
+
+	if (isExecuteArch) {
+		arrSpecialSlots.push_back(strDerEntitlementsSlotSHA.empty() ? strEmptySHA : strDerEntitlementsSlotSHA);
+		arrSpecialSlots.push_back(strEmptySHA);
+	}
+	arrSpecialSlots.push_back(strEntitlementsSlotSHA.empty() ? strEmptySHA : strEntitlementsSlotSHA);
+	arrSpecialSlots.push_back(strEmptySHA);
+	arrSpecialSlots.push_back(strCodeResourcesSHA.empty() ? strEmptySHA : strCodeResourcesSHA);
+	arrSpecialSlots.push_back(strRequirementsSlotSHA.empty() ? strEmptySHA : strRequirementsSlotSHA);
+	arrSpecialSlots.push_back(strInfoPlistSHA.empty() ? strEmptySHA : strInfoPlistSHA);
+
+	// Trailing entries whose hash == strEmptySHA in `arrSpecialSlots` can be omitted; erase them.
+	// Special slots have negative indexes and come before code slots, i.e. index -1 is the 'Info.plist'
+	// slot, and -2 is 'Requirements slot'.
+	// Note that in `arrSpecialSlots` is reversed and trailing elements appear at front.
+	auto itLastUsedSpecialSlot = std::find_if(arrSpecialSlots.begin(), arrSpecialSlots.end(),
+		[&](const string& strSHA) { return strSHA != strEmptySHA; });
+	if (itLastUsedSpecialSlot != arrSpecialSlots.begin()) {
+		arrSpecialSlots.erase(arrSpecialSlots.begin(), itLastUsedSpecialSlot);
+	}
+
+	uint32_t uPageSize = 1u << cdHeader.pageSize;
+	uint32_t uPages = uCodeLength / uPageSize;
+	uint32_t uRemain = uCodeLength % uPageSize;
+	uint32_t uCodeSlots = uPages + (uRemain > 0 ? 1 : 0);
+
+	uint32_t uHeaderLength = 44;
+	if (uVersion >= 0x20100) {
+		uHeaderLength += sizeof(cdHeader.scatterOffset);
+	}
+	if (uVersion >= 0x20200) {
+		uHeaderLength += sizeof(cdHeader.teamOffset);
+	}
+	if (uVersion >= 0x20300) {
+		uHeaderLength += sizeof(cdHeader.spare3);
+		uHeaderLength += sizeof(cdHeader.codeLimit64);
+	}
+	if (uVersion >= 0x20400) {
+		uHeaderLength += sizeof(cdHeader.execSegBase);
+		uHeaderLength += sizeof(cdHeader.execSegLimit);
+		uHeaderLength += sizeof(cdHeader.execSegFlags);
+	}
+
+	uint32_t uBundleIDLength = (uint32_t)strBundleId.size() + 1;
+	uint32_t uTeamIDLength = (uint32_t)strTeamId.size() + 1;
+	uint32_t uSpecialSlotsLength = (uint32_t)arrSpecialSlots.size() * cdHeader.hashSize;
+	uint32_t uCodeSlotsLength = uCodeSlots * cdHeader.hashSize;
+
+	uint32_t uSlotLength = uHeaderLength + uBundleIDLength + uSpecialSlotsLength + uCodeSlotsLength;
+	strOutput.reserve(uSlotLength + uTeamIDLength); // pre-allocate to avoid reallocations
+	if (uVersion >= 0x20100) {
+		//todo
+	}
+	if (uVersion >= 0x20200 && !strTeamId.empty()) {
+		uSlotLength += uTeamIDLength;
+	}
+
+	cdHeader.length = BE(uSlotLength);
+	cdHeader.identOffset = BE(uHeaderLength);
+	cdHeader.nSpecialSlots = BE((uint32_t)arrSpecialSlots.size());
+	cdHeader.nCodeSlots = BE(uCodeSlots);
+
+	uint32_t uHashOffset = uHeaderLength + uBundleIDLength + uSpecialSlotsLength;
+	if (uVersion >= 0x20100) {
+		//todo
+	}
+	// `strTeamId` may be empty for ad-hoc signature; in that case, `cdHeader.teamOffset == 0` and string
+	// data is not serialized below.
+	if (uVersion >= 0x20200 && !strTeamId.empty()) {
+		uHashOffset += uTeamIDLength;
+		cdHeader.teamOffset = BE(uHeaderLength + uBundleIDLength);
+	}
+	cdHeader.hashOffset = BE(uHashOffset);
+
+	strOutput.append((const char*)&cdHeader, uHeaderLength);
+	strOutput.append(strBundleId.data(), strBundleId.size() + 1);
+	if (uVersion >= 0x20100) {
+		//todo
+	}
+	if (uVersion >= 0x20200 && !strTeamId.empty()) {
+		strOutput.append(strTeamId.data(), strTeamId.size() + 1);
+	}
+
+	for (uint32_t i = 0; i < LE(cdHeader.nSpecialSlots); i++) {
+		strOutput.append(arrSpecialSlots[i].data(), arrSpecialSlots[i].size());
+	}
+
+	if (NULL != pCodeSlotsData && (uCodeSlotsDataLength == uCodeSlots * cdHeader.hashSize)) { //use exists
+		strOutput.append((const char*)pCodeSlotsData, uCodeSlotsDataLength);
+	} else {
+		uint8_t hash[32]; // large enough for both SHA1 (20) and SHA256 (32)
+		for (uint32_t i = 0; i < uPages; i++) {
+			if (1 == cdHeader.hashType) {
+				::SHA1(pCodeBase + uPageSize * i, uPageSize, hash);
+				strOutput.append((const char*)hash, 20);
+			} else {
+				::SHA256(pCodeBase + uPageSize * i, uPageSize, hash);
+				strOutput.append((const char*)hash, 32);
+			}
+		}
+		if (uRemain > 0) {
+			if (1 == cdHeader.hashType) {

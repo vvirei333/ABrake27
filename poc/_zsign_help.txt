@@ -1,0 +1,38 @@
+zsign (v1.1.1) is a codesign alternative for iOS12+ on macOS, Linux and Windows. 
+Visit https://github.com/zhlynn/zsign for more information.
+
+Usage: zsign [-options] [-k privkey.pem] [-m dev.prov] [-o output.ipa] file|folder
+options:
+-k, --pkey		Path to private key or p12 file. (PEM or DER format)
+-m, --prov		Path to mobile provisioning profile.
+-c, --cert		Path to certificate file. (PEM or DER format)
+-a, --adhoc		Perform ad-hoc signature only.
+-d, --debug		Generate debug output files. (.zsign_debug folder)
+-f, --force		Force sign without cache when signing folder.
+-o, --output		Path to output ipa file.
+-p, --password		Password for private key or p12 file.
+-b, --bundle_id		New bundle id to change.
+-n, --bundle_name	New bundle name to change.
+-r, --bundle_version	New bundle version to change.
+-e, --entitlements	New entitlements to change.
+-I, --icon		Path to new app icon to replace the primary icon. (PNG format)
+-z, --zip_level		Compressed level when output the ipa file. (0-9)
+-l, --dylib		Path to inject dylib file. Use -l multiple time to inject multiple dylib files at once.
+-D, --rm_dylib		Name of dylib to remove. Use -D multiple times to remove multiple dylibs at once.
+-w, --weak		Inject dylib as LC_LOAD_WEAK_DYLIB.
+-i, --install		Install ipa file using ideviceinstaller command for test.
+-t, --temp_folder	Path to temporary folder for intermediate files.
+-2, --sha256_only	(Deprecated, now the default.) Kept for backward compatibility.
+-L, --legacy_sha1	Emit a dual SHA1+SHA256 CodeDirectory for iOS <= 10 compatibility.
+-C, --check		Check certificate validity and OCSP revocation status.
+-q, --quiet		Quiet operation.
+-x, --metadata		Extract metadata and icon to the specified directory.
+-R, --rm_provision	Remove mobileprovision file after signing.
+-S, --enable_docs	Enable UISupportsDocumentBrowser and UIFileSharingEnabled.
+-M, --min_version	Set MinimumOSVersion in Info.plist.
+-E, --rm_extensions	Remove all app extensions (PlugIns/Extensions).
+-W, --rm_watch		Remove watch app from the bundle.
+-U, --rm_uisd		Remove UISupportedDevices from Info.plist.
+-P, --inject_extensions	Also inject -l dylibs into app extensions (PlugIns/Extensions).
+-v, --version		Shows version.
+-h, --help		Shows help (this message).

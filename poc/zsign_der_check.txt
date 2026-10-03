@@ -1,0 +1,17 @@
+Usage: zsign [-options] [-k privkey.pem] [-m dev.prov] [-o output.ipa] file|folder
+-k, --pkey		Path to private key or p12 file. (PEM or DER format)
+-c, --cert		Path to certificate file. (PEM or DER format)
+-d, --debug		Generate debug output files. (.zsign_debug folder)
+-f, --force		Force sign without cache when signing folder.
+-e, --entitlements	New entitlements to change.
+-t, --temp_folder	Path to temporary folder for intermediate files.
+---readme---
+34:- **Bundle editing** — change bundle ID, display name, version, minimum OS version, entitlements
+100:Usage: zsign [-options] [-k privkey.pem] [-m dev.prov] [-o output.ipa] file|folder
+103:  -k, --pkey              Path to private key or p12 file (PEM or DER format)
+105:  -c, --cert              Path to certificate file (PEM or DER format)
+107:  -d, --debug             Generate debug output (.zsign_debug folder)
+114:  -e, --entitlements      New entitlements file
+121:  -t, --temp_folder       Temporary folder for intermediate files
+273:Unzip the IPA first, then sign the extracted folder. On the first sign, zsign caches signature data in `.zsign_cache`. Subsequent re-signs with different assets reuse the cache, making the process significantly faster — a key advantage over running `codesign` from scratch on every build.
+291:zsign is licensed under the MIT License. See the [LICENSE](LICENSE) file.

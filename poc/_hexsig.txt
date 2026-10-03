@@ -1,0 +1,15 @@
+LC_CODE_SIGNATURE (dataoff,datasize) = (50944, 1744)
+file size=52688 sig region 50944..52688 (1744 bytes)
+first 96 bytes:
+  +0000: fa de 0c c0 00 00 06 c6 00 00 00 04 00 00 00 00
+  +0010: 00 00 00 2c 00 00 00 02 00 00 03 16 00 00 00 05
+  +0020: 00 00 03 9e 00 00 00 07 00 00 05 c4 fa de 0c 02
+  +0030: 00 00 02 ea 00 02 04 00 00 00 00 00 00 00 01 4a
+  +0040: 00 00 00 58 00 00 00 07 00 00 00 0d 00 00 c7 00
+  +0050: 20 02 00 0c 00 00 00 00 00 00 00 00 00 00 00 00
+last 32 bytes:
+  +06b0: 6e 74 69 61 6c 4d 61 6e 61 67 65 72 55 73 65 72
+  +06c0: 43 6c 69 65 6e 74 00 00 00 00 00 00 00 00 00 00
+superblob magic as BE=0xfade0cc0  as LE=0xc00cdefa
+superblob len BE=1734 LE=3322281984
+superblob count BE=4 LE=67108864

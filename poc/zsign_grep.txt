@@ -1,0 +1,68 @@
+860 /tmp/zs_signing.cpp
+9:void ZSign::_DERLength(string& strBlob, uint64_t uLength)
+23:string ZSign::_DER(const jvalue& data)
+33:		_DERLength(strOutput, uVal);
+43:		_DERLength(strOutput, strVal.size());
+49:			strArray += _DER(data[i]);
+52:		_DERLength(strOutput, strArray.size());
+62:			string strVal = _DER(data[strKey]);
+66:			_DERLength(strEntry, strKey.size());
+71:			_DERLength(strDict, strEntry.size());
+76:		_DERLength(strOutput, strDict.size());
+85:		assert(false && "Unsupported Entitlements DER Type");
+110:	uint32_t uSlotLength = SlotParseGeneralHeader("CSSLOT_REQUIREMENTS", pSlotBase, pbi);
+261:bool ZSign::SlotParseEntitlements(uint8_t* pSlotBase, CS_BlobIndex* pbi)
+263:	uint32_t uSlotLength = SlotParseGeneralHeader("CSSLOT_ENTITLEMENTS", pSlotBase, pbi);
+268:	string strEntitlements = "\t\t\t";
+269:	strEntitlements.append((const char*)pSlotBase + 8, uSlotLength - 8);
+270:	ZUtil::StringReplace(strEntitlements, "\n", "\n\t\t\t");
+271:	ZLog::PrintV("\tentitlements: \n%s\n", strEntitlements.c_str());
+276:		ZFile::WriteFile("./.zsign_debug/Entitlements.slot", (const char*)pSlotBase, uSlotLength);
+277:		ZFile::WriteFile("./.zsign_debug/Entitlements.plist", (const char*)pSlotBase + 8, uSlotLength - 8);
+282:bool ZSign::SlotParseDerEntitlements(uint8_t* pSlotBase, CS_BlobIndex* pbi)
+284:	uint32_t uSlotLength = SlotParseGeneralHeader("CSSLOT_DER_ENTITLEMENTS", pSlotBase, pbi);
+292:		ZFile::WriteFile("./.zsign_debug/Entitlements.der.slot", (const char*)pSlotBase, uSlotLength);
+297:bool ZSign::SlotBuildEntitlements(const string& strEntitlements, string& strOutput)
+300:	if (strEntitlements.empty()) {
+305:	uint32_t uLength = BE((uint32_t)strEntitlements.size() + 8);
+309:	strOutput.append(strEntitlements.data(), strEntitlements.size());
+314:bool ZSign::SlotBuildDerEntitlements(const string& strEntitlements, string& strOutput)
+317:	if (strEntitlements.empty()) {
+322:	jvInfo.read_plist(strEntitlements);
+324:	string strInnerDict = _DER(jvInfo);
+333:	string strRawEntitlementsData;
+334:	strRawEntitlementsData.append(1, (char)0x70);
+335:	_DERLength(strRawEntitlementsData, strBody.size());
+336:	strRawEntitlementsData += strBody;
+338:	uint32_t uMagic = BE((uint32_t)CSMAGIC_EMBEDDED_DER_ENTITLEMENTS);
+339:	uint32_t uLength = BE((uint32_t)strRawEntitlementsData.size() + 8);
+343:	strOutput.append(strRawEntitlementsData.data(), strRawEntitlementsData.size());
+350:	uint32_t uSlotLength = SlotParseGeneralHeader("CSSLOT_CODEDIRECTORY", pSlotBase, pbi);
+418:			suffix = "\tEntitlements Slot\n";
+421:			suffix = "\tEntitlements(DER) Slot\n";
+461:	const string& strEntitlementsSlotSHA,
+462:	const string& strDerEntitlementsSlotSHA,
+501:		arrSpecialSlots.push_back(strDerEntitlementsSlotSHA.empty() ? strEmptySHA : strDerEntitlementsSlotSHA);
+504:	arrSpecialSlots.push_back(strEntitlementsSlotSHA.empty() ? strEmptySHA : strEntitlementsSlotSHA);
+615:	uint32_t uSlotLength = SlotParseGeneralHeader("CSSLOT_SIGNATURESLOT", pSlotBase, pbi);
+676:	if (pSignAsset->m_bAdhoc) { // The empty CSSLOT_SIGNATURESLOT
+746:	CS_SuperBlob* psb = (CS_SuperBlob*)pCSBase;
+755:	CS_SuperBlob* psb = (CS_SuperBlob*)pCSBase;
+765:	CS_BlobIndex* pbi = (CS_BlobIndex*)(pCSBase + sizeof(CS_SuperBlob));
+769:		case CSSLOT_CODEDIRECTORY:
+772:		case CSSLOT_REQUIREMENTS:
+775:		case CSSLOT_ENTITLEMENTS:
+776:			SlotParseEntitlements(pSlotBase, pbi);
+778:		case CSSLOT_DER_ENTITLEMENTS:
+779:			SlotParseDerEntitlements(pSlotBase, pbi);
+781:		case CSSLOT_ALTERNATE_CODEDIRECTORIES:
+784:		case CSSLOT_SIGNATURESLOT:
+787:		case CSSLOT_IDENTIFICATIONSLOT:
+788:			SlotParseGeneralHeader("CSSLOT_IDENTIFICATIONSLOT", pSlotBase, pbi);
+790:		case CSSLOT_TICKETSLOT:
+791:			SlotParseGeneralHeader("CSSLOT_TICKETSLOT", pSlotBase, pbi);
+794:			SlotParseGeneralTailer(pSlotBase, SlotParseGeneralHeader("CSSLOT_UNKNOWN", pSlotBase, pbi));
+827:	CS_SuperBlob* psb = (CS_SuperBlob*)pCSBase;
+832:	CS_BlobIndex* pbi = (CS_BlobIndex*)(pCSBase + sizeof(CS_SuperBlob));
+836:		case CSSLOT_CODEDIRECTORY:
+845:		case CSSLOT_ALTERNATE_CODEDIRECTORIES:

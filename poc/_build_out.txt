@@ -1,0 +1,37 @@
+g++ -std=c++11 -O3 -Wno-unused-result -MMD -MP -DZSIGN_VERSION=1.1.1-deronly -I../../src -I../../src/common -I../../src/third-party/zlib  -c ../../src/archo.cpp -o .build/archo.o
+g++ -std=c++11 -O3 -Wno-unused-result -MMD -MP -DZSIGN_VERSION=1.1.1-deronly -I../../src -I../../src/common -I../../src/third-party/zlib  -c ../../src/bundle.cpp -o .build/bundle.o
+g++ -std=c++11 -O3 -Wno-unused-result -MMD -MP -DZSIGN_VERSION=1.1.1-deronly -I../../src -I../../src/common -I../../src/third-party/zlib  -c ../../src/certcheck.cpp -o .build/certcheck.o
+g++ -std=c++11 -O3 -Wno-unused-result -MMD -MP -DZSIGN_VERSION=1.1.1-deronly -I../../src -I../../src/common -I../../src/third-party/zlib  -c ../../src/macho.cpp -o .build/macho.o
+g++ -std=c++11 -O3 -Wno-unused-result -MMD -MP -DZSIGN_VERSION=1.1.1-deronly -I../../src -I../../src/common -I../../src/third-party/zlib  -c ../../src/metadata.cpp -o .build/metadata.o
+g++ -std=c++11 -O3 -Wno-unused-result -MMD -MP -DZSIGN_VERSION=1.1.1-deronly -I../../src -I../../src/common -I../../src/third-party/zlib  -c ../../src/openssl.cpp -o .build/openssl.o
+g++ -std=c++11 -O3 -Wno-unused-result -MMD -MP -DZSIGN_VERSION=1.1.1-deronly -I../../src -I../../src/common -I../../src/third-party/zlib  -c ../../src/signing.cpp -o .build/signing.o
+g++ -std=c++11 -O3 -Wno-unused-result -MMD -MP -DZSIGN_VERSION=1.1.1-deronly -I../../src -I../../src/common -I../../src/third-party/zlib  -c ../../src/zsign.cpp -o .build/zsign.o
+g++ -std=c++11 -O3 -Wno-unused-result -MMD -MP -DZSIGN_VERSION=1.1.1-deronly -I../../src -I../../src/common -I../../src/third-party/zlib  -c ../../src/common/archive.cpp -o .build/common/archive.o
+g++ -std=c++11 -O3 -Wno-unused-result -MMD -MP -DZSIGN_VERSION=1.1.1-deronly -I../../src -I../../src/common -I../../src/third-party/zlib  -c ../../src/common/fs.cpp -o .build/common/fs.o
+g++ -std=c++11 -O3 -Wno-unused-result -MMD -MP -DZSIGN_VERSION=1.1.1-deronly -I../../src -I../../src/common -I../../src/third-party/zlib  -c ../../src/common/json.cpp -o .build/common/json.o
+g++ -std=c++11 -O3 -Wno-unused-result -MMD -MP -DZSIGN_VERSION=1.1.1-deronly -I../../src -I../../src/common -I../../src/third-party/zlib  -c ../../src/common/log.cpp -o .build/common/log.o
+g++ -std=c++11 -O3 -Wno-unused-result -MMD -MP -DZSIGN_VERSION=1.1.1-deronly -I../../src -I../../src/common -I../../src/third-party/zlib  -c ../../src/common/sha.cpp -o .build/common/sha.o
+g++ -std=c++11 -O3 -Wno-unused-result -MMD -MP -DZSIGN_VERSION=1.1.1-deronly -I../../src -I../../src/common -I../../src/third-party/zlib  -c ../../src/common/timer.cpp -o .build/common/timer.o
+g++ -std=c++11 -O3 -Wno-unused-result -MMD -MP -DZSIGN_VERSION=1.1.1-deronly -I../../src -I../../src/common -I../../src/third-party/zlib  -c ../../src/common/util.cpp -o .build/common/util.o
+cc -O3 -Wno-unused-result -I../../src/third-party/zlib -c ../../src/third-party/zlib/adler32.c -o .build/zlib/adler32.o
+cc -O3 -Wno-unused-result -I../../src/third-party/zlib -c ../../src/third-party/zlib/compress.c -o .build/zlib/compress.o
+cc -O3 -Wno-unused-result -I../../src/third-party/zlib -c ../../src/third-party/zlib/crc32.c -o .build/zlib/crc32.o
+cc -O3 -Wno-unused-result -I../../src/third-party/zlib -c ../../src/third-party/zlib/deflate.c -o .build/zlib/deflate.o
+cc -O3 -Wno-unused-result -I../../src/third-party/zlib -c ../../src/third-party/zlib/gzclose.c -o .build/zlib/gzclose.o
+cc -O3 -Wno-unused-result -I../../src/third-party/zlib -c ../../src/third-party/zlib/gzlib.c -o .build/zlib/gzlib.o
+cc -O3 -Wno-unused-result -I../../src/third-party/zlib -c ../../src/third-party/zlib/gzread.c -o .build/zlib/gzread.o
+cc -O3 -Wno-unused-result -I../../src/third-party/zlib -c ../../src/third-party/zlib/gzwrite.c -o .build/zlib/gzwrite.o
+cc -O3 -Wno-unused-result -I../../src/third-party/zlib -c ../../src/third-party/zlib/infback.c -o .build/zlib/infback.o
+cc -O3 -Wno-unused-result -I../../src/third-party/zlib -c ../../src/third-party/zlib/inffast.c -o .build/zlib/inffast.o
+cc -O3 -Wno-unused-result -I../../src/third-party/zlib -c ../../src/third-party/zlib/inflate.c -o .build/zlib/inflate.o
+cc -O3 -Wno-unused-result -I../../src/third-party/zlib -c ../../src/third-party/zlib/inftrees.c -o .build/zlib/inftrees.o
+cc -O3 -Wno-unused-result -I../../src/third-party/zlib -c ../../src/third-party/zlib/trees.c -o .build/zlib/trees.o
+cc -O3 -Wno-unused-result -I../../src/third-party/zlib -c ../../src/third-party/zlib/uncompr.c -o .build/zlib/uncompr.o
+cc -O3 -Wno-unused-result -I../../src/third-party/zlib -c ../../src/third-party/zlib/zutil.c -o .build/zlib/zutil.o
+cc -O3 -Wno-unused-result -I../../src -I../../src/common -I../../src/third-party/zlib  -c ../../src/third-party/minizip/ioapi.c -o .build/minizip/ioapi.o
+cc -O3 -Wno-unused-result -I../../src -I../../src/common -I../../src/third-party/zlib  -c ../../src/third-party/minizip/zip.c -o .build/minizip/zip.o
+cc -O3 -Wno-unused-result -I../../src -I../../src/common -I../../src/third-party/zlib  -c ../../src/third-party/minizip/unzip.c -o .build/minizip/unzip.o
+g++ .build/archo.o .build/bundle.o .build/certcheck.o .build/macho.o .build/metadata.o .build/openssl.o .build/signing.o .build/zsign.o .build/common/archive.o .build/common/fs.o .build/common/json.o .build/common/log.o .build/common/sha.o .build/common/timer.o .build/common/util.o .build/zlib/adler32.o .build/zlib/compress.o .build/zlib/crc32.o .build/zlib/deflate.o .build/zlib/gzclose.o .build/zlib/gzlib.o .build/zlib/gzread.o .build/zlib/gzwrite.o .build/zlib/infback.o .build/zlib/inffast.o .build/zlib/inflate.o .build/zlib/inftrees.o .build/zlib/trees.o .build/zlib/uncompr.o .build/zlib/zutil.o .build/minizip/ioapi.o .build/minizip/zip.o .build/minizip/unzip.o -lssl -lcrypto -o ../../bin/zsign
+[0;32m>>> Build OK![0m -> /run/media/ivan/New Volume/My Projects/iphone-ios27-diff/poc/zsign_src/bin/zsign
+===EXIT 0===
+-rwxr-xr-x 1 ivan ivan 660208 окт  3 02:51 ../../bin/zsign

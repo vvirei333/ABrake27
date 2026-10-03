@@ -1,0 +1,71 @@
+
+	if (ZLog::IsDebug()) {
+		ZFile::WriteFile("./.zsign_debug/Entitlements.der.slot", (const char*)pSlotBase, uSlotLength);
+	}
+	return true;
+}
+
+bool ZSign::SlotBuildEntitlements(const string& strEntitlements, string& strOutput)
+{
+	strOutput.clear();
+	if (strEntitlements.empty()) {
+		return false;
+	}
+
+	uint32_t uMagic = BE((uint32_t)CSMAGIC_EMBEDDED_ENTITLEMENTS);
+	uint32_t uLength = BE((uint32_t)strEntitlements.size() + 8);
+
+	strOutput.append((const char*)&uMagic, sizeof(uMagic));
+	strOutput.append((const char*)&uLength, sizeof(uLength));
+	strOutput.append(strEntitlements.data(), strEntitlements.size());
+
+	return true;
+}
+
+bool ZSign::SlotBuildDerEntitlements(const string& strEntitlements, string& strOutput)
+{
+	strOutput.clear();
+	if (strEntitlements.empty()) {
+		return false;
+	}
+
+	jvalue jvInfo;
+	jvInfo.read_plist(strEntitlements);
+
+	string strInnerDict = _DER(jvInfo);
+
+	string strVersion;
+	strVersion.append(1, 0x02);
+	strVersion.append(1, 0x01);
+	strVersion.append(1, 0x01);
+
+	string strBody = strVersion + strInnerDict;
+
+	string strRawEntitlementsData;
+	strRawEntitlementsData.append(1, (char)0x70);
+	_DERLength(strRawEntitlementsData, strBody.size());
+	strRawEntitlementsData += strBody;
+
+	uint32_t uMagic = BE((uint32_t)CSMAGIC_EMBEDDED_DER_ENTITLEMENTS);
+	uint32_t uLength = BE((uint32_t)strRawEntitlementsData.size() + 8);
+
+	strOutput.append((const char*)&uMagic, sizeof(uMagic));
+	strOutput.append((const char*)&uLength, sizeof(uLength));
+	strOutput.append(strRawEntitlementsData.data(), strRawEntitlementsData.size());
+
+	return true;
+}
+
+bool ZSign::SlotParseCodeDirectory(uint8_t* pSlotBase, CS_BlobIndex* pbi)
+{
+	uint32_t uSlotLength = SlotParseGeneralHeader("CSSLOT_CODEDIRECTORY", pSlotBase, pbi);
+	if (uSlotLength < 8) {
+		return false;
+	}
+
+	vector<uint8_t*> arrCodeSlots;
+	vector<uint8_t*> arrSpecialSlots;
+	CS_CodeDirectory cdHeader = *((CS_CodeDirectory*)pSlotBase);
+	uint8_t* pHashes = pSlotBase + LE(cdHeader.hashOffset);
+	for (uint32_t i = 0; i < LE(cdHeader.nCodeSlots); i++) {
+		arrCodeSlots.push_back(pHashes + cdHeader.hashSize * i);

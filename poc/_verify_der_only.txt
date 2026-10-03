@@ -1,0 +1,15 @@
+[superblob] length=1071 count=3 slots=0x0, 0x2, 0x7
+[PASS] DER slot (0x7) present in superblob
+[PASS] XML slot (0x5) absent from superblob
+[PASS] raw CSMAGIC_ENTITLEMENTS (0xfade7171) absent from file
+[PASS] raw CSMAGIC_DER_ENTITLEMENTS (0xfade7172) present in file
+[DER blob] offset=807 len=264 sha256=ff2c95833d38cb5a5fcc5fe640624cb4...
+[CodeDirectory] len=759 version=0x20400 hashType=2 hashSize=32 nSpecialSlots=7 nCodeSlots=13 hashOffset=343
+[PASS] nSpecialSlots >= 7 (DER hash keeps slot -7) -- nSpecialSlots=7
+[PASS] special slot -7 (DER) hash == SHA256(DER blob) -- slot=ff2c95833d38cb5a5fcc5fe640624cb4... blob=ff2c95833d38cb5a5fcc5fe640624cb4...
+[PASS] special slot -5 (XML) is all zero -- slot=00000000000000000000000000000000...
+[special slots] -1=b2928ab9f3eb7b12... -5=0000000000000000... -7=ff2c95833d38cb5a...
+[DER keys] ['AppleCredentialManagerUserClient', 'AppleMobileFileIntegrityUserClient', 'com.apple.private.amfi.can-load-trust-cache', 'com.apple.private.amfi.developer-mode-control', 'com.apple.security.iokit-user-client-class', 'platform-application']
+[PASS] DER payload contains all 4 expected entitlements -- missing=[]
+
+RESULT: ALL CHECKS PASSED

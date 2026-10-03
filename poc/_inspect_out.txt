@@ -1,0 +1,72 @@
+=== ldid -e (entitlements) ===
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.private.amfi.developer-mode-control</key>
+	<true/>
+	<key>com.apple.private.amfi.can-load-trust-cache</key>
+	<true/>
+	<key>platform-application</key>
+	<true/>
+	<key>com.apple.security.iokit-user-client-class</key>
+	<array>
+		<string>AppleMobileFileIntegrityUserClient</string>
+		<string>AppleCredentialManagerUserClient</string>
+	</array>
+</dict>
+</plist>
+
+=== ldid -h (cdhash) ===
+Executable=/tmp/ipaX/Payload/EnableAMFIDevMode.app/EnableAMFIDevMode
+Identifier=EnableAMFIDevMode
+CodeDirectory v=20400 size=746 flags=0x0(none) hashes=13+7 location=embedded
+Hash type=sha256 size=32
+CandidateCDHash sha256=1daa256c00ede4b72d9999d367e0f108fd15aee1
+CandidateCDHashFull sha256=1daa256c00ede4b72d9999d367e0f108fd15aee1502385642d178b9deb87728c
+Hash choices=sha256
+CDHash=1daa256c00ede4b72d9999d367e0f108fd15aee1
+TeamIdentifier=not set
+
+=== file ===
+/tmp/ipaX/Payload/EnableAMFIDevMode.app/EnableAMFIDevMode: Mach-O 64-bit arm64 executable, flags:<NOUNDEFS|DYLDLINK|TWOLEVEL|PIE>
+
+=== mach-o load commands (LC_*) ===
+      cmd LC_SEGMENT_64
+      cmd LC_SEGMENT_64
+      cmd LC_SEGMENT_64
+      cmd LC_SEGMENT_64
+      cmd LC_SEGMENT_64
+          cmd LC_LOAD_DYLIB
+          cmd LC_LOAD_DYLIB
+          cmd LC_LOAD_DYLIB
+      cmd LC_CODE_SIGNATURE
+
+=== code signature presence (codesign -d style via ldid) ===
+/run/media/ivan/New Volume/My Projects/iphone-ios27-diff/poc/_inspect_host.sh: строка 24: codesign: command not found
+(no codesign binary)
+
+=== entitlements.plist on disk ===
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Platform-restricted; NOT grantable to a sideloaded app without an
+	     existing platform/jailbreak primitive. Included for completeness and
+	     for on-device testing on a device you fully control. -->
+	<key>com.apple.private.amfi.developer-mode-control</key>
+	<true/>
+	<key>com.apple.private.amfi.can-load-trust-cache</key>
+	<true/>
+	<key>platform-application</key>
+	<true/>
+	<!-- Needed so the binary may talk to arbitrary IOKit services. -->
+	<key>com.apple.security.iokit-user-client-class</key>
+	<array>
+		<string>AppleMobileFileIntegrityUserClient</string>
+		<string>AppleCredentialManagerUserClient</string>
+	</array>
+</dict>
+</plist>
+
+=== DONE ===

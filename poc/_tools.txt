@@ -1,0 +1,26 @@
+### host: Linux cachyos-x8664 7.2.8-2-cachyos #1 SMP PREEMPT_DYNAMIC Thu, 01 Oct 2026 21:19:14 +0000 x86_64 GNU/Linux
+python3        -> /usr/bin/python3
+python         -> /usr/bin/python
+zsign          -> MISSING
+ldid           -> /usr/bin/ldid
+ldid2          -> /usr/bin/ldid2
+jtool          -> MISSING
+jtool2         -> MISSING
+codesign       -> MISSING
+llvm-objdump   -> /usr/bin/llvm-objdump
+objdump        -> /usr/bin/objdump
+zip            -> /usr/bin/zip
+unzip          -> /usr/bin/unzip
+openssl        -> /usr/bin/openssl
+
+### python3 version
+Python 3.14.7
+
+### ldid version
+Link Identity Editor 2.1.5-procursus7
+
+Usage: ldid [-Acputype:subtype] [-a] [-C[adhoc | enforcement | expires | hard |
+
+### ldid help (DER hints?)
+   -S[file.xml]  Pseudo-sign using the entitlements in file.xml
+   -M            Merge entitlements with any existing

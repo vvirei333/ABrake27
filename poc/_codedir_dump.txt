@@ -1,0 +1,14 @@
+[macho] size=52688 ncmds=20 endian=LE LC_CODE_SIGNATURE=(50944, 1744)
+[superblob] magic=0xc00cdefa len=3322281984 count=67108864
+  slot[0] type=0x04000000 off=0x00000000 magic=0xc00cdefa
+    [unknown blob 0xc00cdefa]
+Traceback (most recent call last):
+  File "/run/media/ivan/New Volume/My Projects/iphone-ios27-diff/poc/_codedir_dump.py", line 94, in <module>
+    main(sys.argv[1])
+    ~~~~^^^^^^^^^^^^^
+  File "/run/media/ivan/New Volume/My Projects/iphone-ios27-diff/poc/_codedir_dump.py", line 60, in main
+    bmagic = rb32(blob, boff)
+  File "/run/media/ivan/New Volume/My Projects/iphone-ios27-diff/poc/_codedir_dump.py", line 40, in rb32
+    return struct.unpack_from(E + "I", b, o)[0]
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+struct.error: unpack_from requires a buffer of at least 33554436 bytes for unpacking 4 bytes at offset 33554432 (actual buffer size is 1744)

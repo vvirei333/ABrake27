@@ -1,0 +1,15 @@
+Archive:  EnableAMFIDevMode_der.ipa
+  Length      Date    Time    Name
+---------  ---------- -----   ----
+      676  10-02-2026 21:42   Info.plist
+        0  10-02-2026 21:42   obj/
+     9512  10-02-2026 21:42   obj/poc.arm64.o
+     9528  10-02-2026 21:42   obj/poc.arm64e.o
+        0  10-02-2026 21:42   Payload/
+        0  10-03-2026 02:58   Payload/EnableAMFIDevMode.app/
+    52688  10-03-2026 02:58   Payload/EnableAMFIDevMode.app/EnableAMFIDevMode
+      676  10-02-2026 21:42   Payload/EnableAMFIDevMode.app/Info.plist
+        0  10-03-2026 02:58   Payload/EnableAMFIDevMode.app/_CodeSignature/
+     1798  10-03-2026 02:58   Payload/EnableAMFIDevMode.app/_CodeSignature/CodeResources
+---------                     -------
+    74878                     10 files

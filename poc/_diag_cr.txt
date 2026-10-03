@@ -1,0 +1,13 @@
+[CodeResources] build/_unpack_der/Payload/EnableAMFIDevMode.app/_CodeSignature/CodeResources  2476 bytes  format=XML
+  top-level keys: ['files', 'files2', 'rules', 'rules2']
+  files: 3 entries
+  files2: 2 entries
+  rules: ['^.*', '^.*\\.lproj/', '^.*\\.lproj/locversion.plist$', '^Base\\.lproj/', '^version.plist$']
+  [files] SHA1 MISMATCH: Info.plist
+  [files] SHA1 MISMATCH: EnableAMFIDevMode
+  [files] MISSING ON DISK: embedded.mobileprovision
+  [files2] SHA1 MISMATCH: EnableAMFIDevMode
+  [files2] SHA256 MISMATCH: EnableAMFIDevMode
+  [files2] MISSING ON DISK: embedded.mobileprovision
+
+RESULT: 6 PROBLEM(S) FOUND

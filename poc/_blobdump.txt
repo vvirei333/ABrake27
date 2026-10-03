@@ -1,0 +1,81 @@
+[macho] file=build/Payload/EnableAMFIDevMode.app/EnableAMFIDevMode size=52688 endian=< ncmds=20
+[LC_CODE_SIGNATURE] offset=50944 size=1744
+  raw head:
+    +0000: fa de 0c c0 00 00 06 c6 00 00 00 04 00 00 00 00 ................
+    +0010: 00 00 00 2c 00 00 00 02 00 00 03 16 00 00 00 05 ...,............
+    +0020: 00 00 03 9e 00 00 00 07 00 00 05 c4 fa de 0c 02 ................
+    +0030: 00 00 02 ea 00 02 04 00 00 00 00 00 00 00 01 4a ...............J
+    ... (1680 more bytes)
+[superblob] magic=0xfade0cc0 (CSMAGIC_EMBEDDED_SIGNATURE (superblob)) length=1734 count=4
+  index[0] type=0x00000000 (CSSLOT_CODEDIRECTORY) offset=44 (0x2c)
+  index[1] type=0x00000002 (CSSLOT_REQUIREMENTS) offset=790 (0x316)
+  index[2] type=0x00000005 (CSSLOT_ENTITLEMENTS) offset=926 (0x39e)
+  index[3] type=0x00000007 (CSSLOT_DER_ENTITLEMENTS) offset=1476 (0x5c4)
+
+=== blob[0] slot=0x0000 (CSSLOT_CODEDIRECTORY) offset=44 magic=0xfade0c02 (CSMAGIC_CODEDIRECTORY) len=746
+    CodeDirectory version=0x20400
+    +002c: fa de 0c 02 00 00 02 ea 00 02 04 00 00 00 00 00 ................
+    +003c: 00 00 01 4a 00 00 00 58 00 00 00 07 00 00 00 0d ...J...X........
+    +004c: 00 00 c7 00 20 02 00 0c 00 00 00 00 00 00 00 00 .... ...........
+    +005c: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ................
+    +006c: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 00 ................
+    +007c: 00 00 00 00 00 00 00 01 45 6e 61 62 6c 65 41 4d ........EnableAM
+    +008c: 46 49 44 65 76 4d 6f 64 65 00 e4 21 c4 6c f2 05 FIDevMode..!.l..
+    +009c: 9a 59 c3 ec 5d be de c6 85 df 3f 33 b9 3b fd c9 .Y..].....?3.;..
+    ... (618 more bytes)
+
+=== blob[1] slot=0x0002 (CSSLOT_REQUIREMENTS) offset=790 magic=0xfade0c01 (CSMAGIC_REQUIREMENT) len=136
+    +0316: fa de 0c 01 00 00 00 88 00 00 00 01 00 00 00 03 ................
+    +0326: 00 00 00 14 fa de 0c 00 00 00 00 74 00 00 00 01 ...........t....
+    +0336: 00 00 00 06 00 00 00 02 00 00 00 11 45 6e 61 62 ............Enab
+    +0346: 6c 65 41 4d 46 49 44 65 76 4d 6f 64 65 00 00 00 leAMFIDevMode...
+    +0356: 00 00 00 06 00 00 00 0f 00 00 00 06 00 00 00 0b ................
+    +0366: 00 00 00 00 00 00 00 0a 73 75 62 6a 65 63 74 2e ........subject.
+    +0376: 43 4e 00 00 00 00 00 01 00 00 00 00 00 00 00 0e CN..............
+    +0386: 00 00 00 01 00 00 00 0a 2a 86 48 86 f7 63 64 06 ........*.H..cd.
+    ... (8 more bytes)
+
+=== blob[2] slot=0x0005 (CSSLOT_ENTITLEMENTS) offset=926 magic=0xfade7171 (CSMAGIC_ENTITLEMENTS (XML)) len=550
+    +039e: fa de 71 71 00 00 02 26 3c 3f 78 6d 6c 20 76 65 ..qq...&<?xml ve
+    +03ae: 72 73 69 6f 6e 3d 22 31 2e 30 22 20 65 6e 63 6f rsion="1.0" enco
+    +03be: 64 69 6e 67 3d 22 55 54 46 2d 38 22 3f 3e 0a 3c ding="UTF-8"?>.<
+    +03ce: 21 44 4f 43 54 59 50 45 20 70 6c 69 73 74 20 50 !DOCTYPE plist P
+    +03de: 55 42 4c 49 43 20 22 2d 2f 2f 41 70 70 6c 65 2f UBLIC "-//Apple/
+    +03ee: 2f 44 54 44 20 50 4c 49 53 54 20 31 2e 30 2f 2f /DTD PLIST 1.0//
+    +03fe: 45 4e 22 20 22 68 74 74 70 3a 2f 2f 77 77 77 2e EN" "http://www.
+    +040e: 61 70 70 6c 65 2e 63 6f 6d 2f 44 54 44 73 2f 50 apple.com/DTDs/P
+    ... (422 more bytes)
+    --- payload as text ---
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.private.amfi.developer-mode-control</key>
+	<true/>
+	<key>com.apple.private.amfi.can-load-trust-cache</key>
+	<true/>
+	<key>platform-application</key>
+	<true/>
+	<key>com.apple.security.iokit-user-client-class</key>
+	<array>
+		<string>AppleMobileFileIntegrityUserClient</string>
+		<string>AppleCredentialManagerUserClient</string>
+	</array>
+</dict>
+</plist>
+
+
+=== blob[3] slot=0x0007 (CSSLOT_DER_ENTITLEMENTS) offset=1476 magic=0xfade7172 (CSMAGIC_DER_ENTITLEMENTS) len=258
+    +05c4: fa de 71 72 00 00 01 02 31 81 f7 30 19 0c 14 70 ..qr....1..0...p
+    +05d4: 6c 61 74 66 6f 72 6d 2d 61 70 70 6c 69 63 61 74 latform-applicat
+    +05e4: 69 6f 6e 01 01 01 30 30 0c 2b 63 6f 6d 2e 61 70 ion...00.+com.ap
+    +05f4: 70 6c 65 2e 70 72 69 76 61 74 65 2e 61 6d 66 69 ple.private.amfi
+    +0604: 2e 63 61 6e 2d 6c 6f 61 64 2d 74 72 75 73 74 2d .can-load-trust-
+    +0614: 63 61 63 68 65 01 01 01 30 32 0c 2d 63 6f 6d 2e cache...02.-com.
+    +0624: 61 70 70 6c 65 2e 70 72 69 76 61 74 65 2e 61 6d apple.private.am
+    +0634: 66 69 2e 64 65 76 65 6c 6f 70 65 72 2d 6d 6f 64 fi.developer-mod
+    ... (130 more bytes)
+    --- payload as text ---
+1��0platform-application00+com.apple.private.amfi.can-load-trust-cache02-com.apple.private.amfi.developer-mode-control0t*com.apple.security.iokit-user-client-class0F"AppleMobileFileIntegrityUserClient AppleCredentialManagerUserClient
+
+[tail padding] region ends at 1744, superblob len=1734, pad=10 bytes

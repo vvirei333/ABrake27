@@ -1,0 +1,10 @@
+/usr/bin/g++
+/usr/bin/gcc
+/usr/bin/make
+/usr/bin/cmake
+/usr/bin/pkg-config
+---
+/usr/include/openssl/evp.h
+/usr/include/openssl/sha.h
+---
+3.6.5

@@ -1,0 +1,33 @@
++ command -v gcc g++ clang make cmake
+/usr/bin/gcc
+/usr/bin/g++
+/usr/bin/clang
+/usr/bin/make
+/usr/bin/cmake
++ ls -la
+итого 100
+drwxr-xr-x 1 ivan ivan 4096 окт  3 02:45 .
+drwxr-xr-x 1 ivan ivan 4096 окт  2 22:16 ..
+-rw-r--r-- 1 ivan ivan 3822 окт  3 02:43 _blobdump.py
+-rw-r--r-- 1 ivan ivan 4774 окт  3 02:44 _blobdump.txt
+drwxr-xr-x 1 ivan ivan    0 окт  2 21:42 build
+-rwxr-xr-x 1 ivan ivan 7406 окт  2 21:26 build_ipa.sh
+-rw-r--r-- 1 ivan ivan 3531 окт  3 02:42 _codedir_dump.py
+-rw-r--r-- 1 ivan ivan  879 окт  3 02:42 _codedir_dump.txt
+-rw-r--r-- 1 ivan ivan 5792 окт  2 21:42 EnableAMFIDevMode.ipa
+-rw-r--r-- 1 ivan ivan  821 окт  2 19:20 entitlements.plist
+-rw-r--r-- 1 ivan ivan 1329 окт  3 02:43 _hexsig.py
+-rw-r--r-- 1 ivan ivan  713 окт  3 02:43 _hexsig.txt
+-rw-r--r-- 1 ivan ivan  969 окт  3 02:29 _inspect_host.sh
+-rw-r--r-- 1 ivan ivan 2537 окт  3 02:29 _inspect_out.txt
+-rw-r--r-- 1 ivan ivan 6950 окт  2 22:23 poc.c
+drwxr-xr-x 1 ivan ivan    0 окт  2 21:10 SDK
+drwxr-xr-x 1 ivan ivan    0 окт  2 19:17 stubs
+-rwxr-xr-x 1 ivan ivan  805 окт  2 19:20 syntax_check_linux.sh
+-rw-r--r-- 1 ivan ivan  117 окт  3 02:45 _toolchain.txt
+-rw-r--r-- 1 ivan ivan  664 окт  3 02:41 _tools_probe.sh
+-rw-r--r-- 1 ivan ivan  848 окт  3 02:41 _tools.txt
+-rw-r--r-- 1 ivan ivan 2241 окт  3 02:44 _zsign_help.txt
+-rw-r--r-- 1 ivan ivan  963 окт  3 02:43 _zsign_probe.txt
+-rw-r--r-- 1 ivan ivan 2463 окт  3 02:44 _zsign_src.txt
+-rw-r--r-- 1 ivan ivan  960 окт  3 02:43 _zsign_tree.txt
