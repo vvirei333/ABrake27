@@ -17,6 +17,7 @@
 4. [CVE-2025-43520 (DarkSword) VFS Race Condition](#4-cve-2025-43520-darksword-vfs-race-condition)
 5. [Research Disclaimer](#5-research-disclaimer)
 6. [Artifacts & Reproducibility](#6-artifacts--reproducibility)
+7. [Live Validation: Developer Mode over `com.apple.amfi.lockdown`](#7-live-validation-developer-mode-over-comappleamfilockdown)
 
 ---
 
@@ -34,6 +35,7 @@ Two independent results are reported:
 | **F1** | AMFI's `amfi_audit_no_entitlements()` (reached from `vnode_check_signature`) **does not validate DER-encoded entitlements** on iOS 27.0.1. A `CodeDirectory` that reports "no entitlements" is trusted after only an XML-blob emptiness check. | Missing code-signing validation | Self-signed IPA without a DER entitlement section passes the no-entitlement audit path. |
 | **F2** | iOS 27.2 beta 2 **introduces a DER entitlement validator** into the exact same function, closing F1. | Patch (the "what changed") | Confirms F1 was a real, silent hole that Apple closed in the beta. |
 | **F3** | `CVE-2025-43520` (DarkSword): a classic **TOCTOU** between the first and second `vm_map_get_upl()` calls in the XNU VFS cluster layer. | Race condition (CWE-362) | Privilege escalation / physmem out-of-bounds read-write. |
+| **F4** | **Developer Mode can be enabled on iOS 27.0.1 (kernel-level, persistent) using the stock Apple lockdown protocol** — no jailbreak, no unsigned code, no entitlement forging. `AmfiService` (pymobiledevice3) sends `action=1` (enable) → reboot → `action=2` (post-restart accept) → reboot → `action=0` (reveal UI) over `com.apple.amfi.lockdown`. Verified after an independent reboot: `mounter query-developer-mode-status = true`, DeveloperDiskImage mounted at `/System/Developer`. **Prerequisite: no passcode.** | Confirmed Apple protocol behavior | Turns on the iOS Developer Mode toggle chain programmatically; enables DDI mounting for legitimate development/research workflows. |
 
 **Bottom line:** the iOS 27.2 beta 2 AMFI delta is small and surgical — the meaningful
 change is a *single added DER check* inside the no-entitlement audit. Everything else
@@ -372,6 +374,92 @@ src_paddr = ((addr64_t)upl_phys_page(pl, 0) << PAGE_SHIFT) + upl_offset; // line
 ```
 
 `cluster_read_contig` (line 5993) mirrors the same pattern at lines **6069** and **6094**.
+
+---
+
+## 7. Live Validation: Developer Mode over `com.apple.amfi.lockdown`
+
+> **This section documents a live, successful enablement on a researcher-owned device.**
+> It complements the static diff (sections 2–4): the binary analysis mapped the AMFI
+> decision ladder, and this session proved the *userspace* trigger for that same ladder.
+
+### 7.1 The XPC / lockdown service
+
+| Item | Value |
+|------|-------|
+| Service | `com.apple.amfi.lockdown` |
+| Payload field | `{"action": N}` (not `Request` — the earlier wrong assumption) |
+| `action=0` | **reveal** — makes the Developer Mode toggle appear in Settings |
+| `action=1` | **enable** — sets the flag, initiates **reboot #1** |
+| `action=2` | **accept** (post-restart confirmation) — initiates **reboot #2** |
+| Invalid | `{"Error": "An unknown error has occured"}` (proves `action` is validated) |
+
+### 7.2 The full working chain
+
+1. **Remove passcode** (Settings → Face ID & Passcode → Turn Off Passcode).
+   With a passcode set, `action=1` and `action=2` both return
+   `{"Error": "Device has a passcode set"}`.
+2. `AmfiService.enable_developer_mode()` → `action=1` → reboot.
+3. After boot: `AmfiService.enable_developer_mode_post_restart()` → `action=2` → reboot.
+4. `AmfiService.reveal_developer_mode_option_in_ui()` → `action=0` (Settings toggle).
+5. Notification shown: *«Режим разработчика включён»* / "Developer Mode Enabled".
+
+### 7.3 Short-circuit behavior (a gotcha)
+
+`pymobiledevice3 cli/amfi.py::enable_developer_mode` checks
+`get_developer_mode_status()` **before** sending anything:
+
+```python
+if await service_provider.get_developer_mode_status():
+    logger.info("Developer mode is already enabled")
+    return
+```
+
+Once the status is `true`, a re-run of `enable-developer-mode` sends **no** `action=1/2`
+and just logs "already enabled". Do not mistake that log line for a fresh protocol run.
+
+### 7.4 Kernel-level verification (persistence proof)
+
+State captured **after an independent `diagnostics restart` issued post-victory**
+(04:36:31 → re-checked 04:39:11):
+
+| Check | Result |
+|-------|--------|
+| `mounter query-developer-mode-status` | `true` |
+| `amfi developer-mode-status` | `true` |
+| `mounter list` | `IsMounted: true`, `MountPath: /System/Developer`, `PersonalizedImageType: DeveloperDiskImage` |
+
+The mounter `QueryDeveloperModeStatus` reply and the DDI mount at `/System/Developer`
+are independent kernel-level signals, and **both survived a reboot** — this is what
+separates this result from the earlier transient `true` (which reverted to `false`).
+
+### 7.5 What does **not** work (negative results, for completeness)
+
+- **`lockdownd SetValue`** (`DeveloperModeStatus`, `security-mode-change-enable`) — routed to
+  `lockbot_set_preference` (generic KV store), **echoes success without entitlement**
+  `com.apple.private.lockdown.finegrained-set` but is **not authoritative**: arbitrary keys
+  persist, while `DeveloperModeStatus` writes are ignored by the real flag reader.
+- **`action=1` with a passcode set** — blocked by AMFI (`Device has a passcode set`).
+- The sysctl `security.mac.amfi.developer_mode_status` is exposed to lockdownd **read-only**
+  (`com.apple.security.exception.sysctl.read-only`) — not writable via that path.
+
+### 7.6 Reproduction
+
+```bash
+# Prerequisite: remove the passcode first (Settings → Face ID & Passcode → Turn Off Passcode)
+
+flatpak-spawn --host python3 -m pymobiledevice3 amfi enable-developer-mode        # action=1 → reboot
+# after boot:
+#   CLI has no separate accept command; call AmfiService.enable_developer_mode_post_restart()
+#   directly (see poc/verify_now2.py), then action=2 reboots the device again
+flatpak-spawn --host python3 -m pymobiledevice3 amfi reveal-developer-mode        # action=0 (toggle in Settings)
+# verify:
+flatpak-spawn --host python3 -m pymobiledevice3 mounter query-developer-mode-status   # → true
+flatpak-spawn --host python3 -m pymobiledevice3 mounter auto-mount                    # → DDI mounted at /System/Developer
+```
+
+Full session detail, attempt history, and honest confound analysis:
+[`FINDINGS_LOCK.md`](../FINDINGS_LOCK.md) · [`HANDOFF.md`](../HANDOFF.md).
 
 ---
 

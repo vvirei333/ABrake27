@@ -30,15 +30,40 @@ installd -> 0xe8008001 (нужен Apple Root CA)
 
 ---
 
-# Session 9 — lockdown / AMFI dev-mode attempt (2026-10-03, iOS 27.0.1 24A446)
+# Session 9 — lockdown / AMFI dev-mode (2026-10-03, iOS 27.0.1 24A446)
 
-## Итог: НЕ РАБОТАЕТ (отрицательный результат)
+## ИТОГ: РАБОТАЕТ — Developer Mode включён и ПЕРЕЖИЛ ребут
 
-`mounter query-developer-mode-status` → **false** (независимая kernel-level проверка)
-`mounter auto-mount` → **ERROR: Developer Mode is disabled** (функциональный тест)
+Независимая проверка **после ребута**, выданного нами в 04:36:31 (проверка 04:39:11):
 
-Dev-mode **НЕ включён** на kernel-level. Протокол Apple пройден до конца, но флаг
-не применился на iOS 27.0.1.
+```
+mounter query-developer-mode-status → true
+amfi developer-mode-status          → true
+mounter list                        → IsMounted: true, MountPath: /System/Developer,
+                                       PersonalizedImageType: DeveloperDiskImage, Version 642.4
+```
+
+Это kernel-level состояние: `QueryDeveloperModeStatus` отвечает сам mounter-сервис,
+DDI смонтирован на `/System/Developer`. **Флаг сохранился через ребут** — то, чего
+не удалось добиться на предыдущей итерации (см. «История попыток»).
+
+## Рабочий метод (воспроизводимый)
+
+1. **Снять пароль** — Settings → Face ID & Passcode → Turn Off Passcode.
+   (С паролем `action=1` → `{'Error': 'Device has a passcode set'}`.)
+2. `AmfiService.enable_developer_mode()` → `action=1` → **ребут**.
+   (`enable_developer_mode(enable_post_restart=True)` по умолчанию сам держит heartbeat,
+   ждёт реконнект и вызывает шаг 3 — но ребут рвёт соединение, поэтому надёжнее
+   запускать шаги 2 и 3 **раздельно**.)
+3. После загрузки: `AmfiService.enable_developer_mode_post_restart()` → `action=2` → **ребут**.
+4. `AmfiService.reveal_developer_mode_option_in_ui()` → `action=0` (тумблер в Settings).
+5. Проверка: `mounter query-developer-mode-status` → `true` (держится после ребута).
+6. Функциональный тест: `mounter auto-mount` → DDI смонтирован в `/System/Developer`.
+
+### Ребут — часть протокола, не случайность
+
+`services/amfi.py`: `action=1` (enable) инициирует ребут, `action=2` (accept) подтверждает
+после ребута. Оба ребута — часть Apple-протокола AMFI, а не побочный эффект.
 
 ## Правильный протокол (найден в pymobiledevice3 11.20.2, `services/amfi.py`)
 
@@ -48,38 +73,56 @@ Dev-mode **НЕ включён** на kernel-level. Протокол Apple пр�
 |--------|----------|------------------|
 | 0 | reveal (показать тумблер в Settings) | `{'success': True}` |
 | 1 | enable (включить) | без пароля `{'success': 1}` → **ребут**; с паролем `{'Error': 'Device has a passcode set'}` |
-| 2 | accept (подтвердить после ребута) | `{'Error': 'Device has a passcode set'}` |
+| 2 | accept (подтвердить после ребута) | без пароля `{'success': 1}` → **ребут**; с паролем `{'Error': 'Device has a passcode set'}` |
 | 99 | невалидный | `{'Error': 'An unknown error has occured'}` |
+
+**Важно:** `action=2` в логах `action_probe.py` показывал passcode error, потому что
+в тот момент пароль ещё был установлен — это подтверждает предусловие «no passcode»,
+а не неработоспособность accept.
 
 Протокол **двухфазный**: action=1 → ребут; action=2 → подтверждение после ребута.
 
-## Почему НЕ сработало
+## История попыток (важно для честности)
 
-1. **action=1 требует отсутствия пароля.** С паролем → `{'Error': 'Device has a passcode set'}`.
-   После снятия пароля action=1 → `{'success': 1}` и ребут.
-2. **Флаг не применился даже после ребута:** kernel-level query = false, DDI не монтируется.
-3. **`set_value` — тупик.** `handle_set_value` → `lockbot_set_preference`, требует entitlement
-   `com.apple.private.lockdown.finegrained-set`. Без него запись эхо-успешна, но не авторитетна:
-   - `set_value(domain=com.apple.security.mac.amfi, key=<любой>, value=<любой>)` — произвольные
-     ключи (включая мусорные) сохраняются и читаются обратно (lockbot KV-store).
+1. **`set_value` — не работает (тупик).** `handle_set_value` → `lockbot_set_preference`,
+   требует entitlement `com.apple.private.lockdown.finegrained-set`. Без него запись
+   эхо-успешна, но не авторитетна:
+   - произвольные ключи (включая мусорные) сохраняются в lockbot KV-store и читаются обратно;
    - `set_value(key=DeveloperModeStatus, value=False)` → возвращает `False`, но readback = `True`
      → запись для этого ключа **не авторитетна**.
-4. **Строка `com.apple.security.exception.sysctl.read-only` = `security.mac.amfi.developer_mode_status`**
+2. **Строка `com.apple.security.exception.sysctl.read-only` = `security.mac.amfi.developer_mode_status`**
    в entitlements lockdownd — это **только чтение** (sysctl read-only).
+3. **04:19 — первый `true` + успешный auto-mount Cryptex1 DDI, затем реверт.**
+   Состояние `true` в этот момент объясняется конфаундом: флаг был `true`, DDI смонтировался,
+   но после ребута (~04:21+) оба показателя вернулись в `false`. Именно поэтому нельзя было
+   считать первый `true` победой.
+4. **04:31–04:36 — финальный цикл.** Снят пароль (предусловие), затем полный протокол:
+   `action=1` (enable) → ребут → `action=2` (post_restart accept) → ребут →
+   `action=0` (reveal_ui) → системное уведомление «Режим разработчика включён».
+   Наша повторная команда `enable-developer-mode` в 04:34 **short-circuit** (см. ниже),
+   потому что статус уже был `true`.
+5. **04:36:31 — контрольный ребут**, выданный независимо (мы сами, после победы),
+   чтобы отсечь конфаунд. **04:39:11 — проверка: всё ещё `true`, DDI смонтирован.**
+   Это и есть доказательство персистентности.
 
-## Что видели по ходу (важно для честности)
+### Short-circuit behavior (важно знать)
 
-- В окне ~04:19 `get_developer_mode_status()` = True **и** `mounter QueryDeveloperModeStatus` = True,
-  `mounter auto-mount` успешно смонтировал Cryptex1 DDI.
-- После ребута (~04:21+) оба = False, `mounter list` = 0 образов, `auto-mount` = "Developer Mode is disabled".
-- Т.е. состояние **не сохранилось**; kernel-level dev-mode на iOS 27.0.1 не активен.
+`cli/amfi.py::enable_developer_mode`:
+```python
+if await service_provider.get_developer_mode_status():
+    logger.info("Developer mode is already enabled")
+    return
+```
+Если статус уже `true`, команда **не отправляет action=1/2 вообще** — просто логирует
+"Developer mode is already enabled" и выходит. Поэтому после `true` повторный запуск
+команды бесполезен (и это нельзя принимать за повторное применение флага).
 
 ## Вывод
 
-iOS 27.0.1 требует **дополнительного подтверждения** для активации dev-mode:
-entitlement на клиенте (`com.apple.private.amfi.developer-mode-control`), либо
-Settings.app toggle с UI-подтверждением, либо Apple-signed install.
-Lockdown/AMFI-протокол сам по себе флаг не поднимает.
+Apple-протокол через `com.apple.amfi.lockdown` (`AmfiService`) **работает на iOS 27.0.1**:
+`enable (action=1) → ребут → post_restart accept (action=2) → ребут → reveal (action=0)`.
+Предусловие — **отсутствие пароля**. Флаг применяется на kernel-level и **переживает ребут**
+(проверено независимым ребутом 04:36:31 → `true` в 04:39:11, DDI в `/System/Developer`).
 
 ## Артефакты сессии 9
 
@@ -97,10 +140,24 @@ Lockdown/AMFI-протокол сам по себе флаг не поднима
 ## Воспроизведение
 
 ```bash
-cd poc
-flatpak-spawn --host python3 state_check.py          # kernel-level status
-flatpak-spawn --host python3 action_probe.py         # протокол AMFI
-flatpak-spawn --host python3 -m pymobiledevice3 mounter query-developer-mode-status
-flatpak-spawn --host python3 -m pymobiledevice3 mounter auto-mount   # → Developer Mode is disabled
+# 1. Снять пароль: Settings → Face ID & Passcode → Turn Off Passcode
+
+# 2. enable (action=1) → ребут. Сервис сам ждёт реконнект (heartbeat),
+#    но ребут рвёт соединение — надёжнее запускать шаги раздельно.
+flatpak-spawn --host python3 -m pymobiledevice3 amfi enable-developer-mode
+
+# 3. После загрузки: post_restart accept (action=2) → ребут.
+#    (CLI не имеет отдельной команды accept; используем poc/verify_now2.py
+#     или прямой вызов AmfiService.enable_developer_mode_post_restart().)
+
+# 4. reveal (action=0): показать тумблер в Settings
+flatpak-spawn --host python3 -m pymobiledevice3 amfi reveal-developer-mode
+
+# 5. Проверка kernel-level
+flatpak-spawn --host python3 -m pymobiledevice3 mounter query-developer-mode-status   # → true
+flatpak-spawn --host python3 -m pymobiledevice3 mounter list                           # IsMounted: true
+
+# 6. Функциональный тест
+flatpak-spawn --host python3 -m pymobiledevice3 mounter auto-mount   # → DeveloperDiskImage mounted
 ```
 
