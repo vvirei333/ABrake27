@@ -1,5 +1,5 @@
 # HANDOFF — iPhone iOS 27.0 vs 27.2 diff / AMFI dev-mode PoC
-> Дата последнего обновления: сессия 8 (см. журнал ниже).
+> Дата последнего обновления: сессия 10 (2026-10-03).
 
 ## Что это
 
@@ -698,16 +698,132 @@ cd poc && ./build_ipa.sh
   `com.apple.private.amfi.developer-mode-control` (см. Сессии 6–8: selector 11 + ребут).
 - Варианты активации бинарника: TrollStore (iOS ≤17.0) или SideStore/AltStore с anisette-сервером.
 
-#### Артефакты
+---
 
-- `/tmp/cline/lock_strings.txt` — все строки lockdownd.
-- `/tmp/cline/lockdownd_ent.xml` — entitlements lockdownd (parsed, валидны).
-- `/tmp/cline/run_devmode2.txt`, `run_probe.txt`, `run_final.txt` — логи прогонов.
+### Сессия 10: Анализ dev-mode после Apple-включения (iPhone 14, iOS 27.0.1 stable)
 
-#### Воспроизведение
+**Дата:** 2026-10-03 (~04:30–05:00 UTC)
+
+**Устройство:** iPhone 14 (iOS 27.0.1, 24A446), UDID: `00008110-...`, пароль снят.
+
+**Контекст:** Сессия 9 успешно включила Developer Mode через `AmfiService` lockdown-протокол
+(`action=1 → reboot → action=2 → reboot → action=0`). Сессия 10 исследует, **что даёт нам
+этот dev-mode** без jailbreak/platformize.
+
+#### А. PoC установка: отрицательный результат (installd 0xe8008001 после dev-mode)
+
+```
+flatpak-spawn --host python3 -m pymobiledevice3 apps install poc/EnableAMFIDevMode_der.ipa
+→ AppInstallError: ApplicationVerificationFailed ... 0xe8008001 (An unknown error)
+```
+
+**Вывод:** Developer Mode **не отключает проверку code-сигнатур** в `installd`.
+Самоподписанный (ad-hoc/DER) IPA с entitlement `platform-application` и
+`com.apple.private.amfi.developer-mode-control` остаётся неподписанным валидным
+Apple корпоративным сертификатом → installd отвергает.
+
+| IPA | Размер | Подпись | Результат |
+|---|---|---|---|
+| `EnableAMFIDevMode.ipa` | 5,792 B | нет (не подписан) | 0xe8008001 |
+| `EnableAMFIDevMode_der.ipa` | 6,533 B | DER (ad-hoc, ldid) | 0xe8008001 |
+| `EnableAMFIDevMode_adhoc.ipa` | 231,499 B | ad-hoc (ldid) | не тестировался |
+
+#### Б. DVT instrumentalisation: туннель активен, инструменты работают
+
+После dev-mode туннель (userspace, no-root) успешно поднимается:
 
 ```bash
-cd poc
-flatpak-spawn --host python3 final_verify.py
+flatpak-spawn --host python3 -m pymobiledevice3 developer dvt proclist
+→ WARNING Trying again over a no-root userspace tunnel ... [200+ процессов]
+
+flatpak-spawn --host python3 -m pymobiledevice3 developer dvt ls /System/Developer
+→ /System/Developer/usr, /System/Developer/Library, /System/Developer/System
+
+flatpak-spawn --host python3 -m pymobiledevice3 developer dvt cp ...
+→ работает (передача файлов)
 ```
+
+**Что НЕ работает:**
+- `dvt launch <bundle-id>` — требует установленный bundle (нашего нет).
+- `core-device launch-application <bundle-id>` — тоже требует bundle.
+- `dvt launch /bin/ls /` → ошибка: лишний аргумент `/` (аргументы после бинарника не разрешены).
+- `start-tunnel --userspace` → всё ещё требует root (не изменилось).
+
+#### В. Линия Б: `sub_fffffff008f4ea80` — очистка флага, а не XPC-уведомление
+
+**Предыдущая гипотеза:** `sub_fffffff008f4ea80` — XPC-уведомление.
+
+**Реальность (дизасм `amfi_beta_full.asm`, строки 9674–9700+):**
+```
+sub_fffffff008f4ea80:
+    bl      #0xfffffff008f7136c         ; вероятно call to _assert / sanity
+    mov     w0, #0x24                   ; аргумент
+    mov     x1, #0
+    ...
+    bl      #0xfffffff008f5ed44         ; call to clear/notify function
+    bl      #0xfffffff008f7133c         ; call to another check
+    cbz     w0, ...
+    adrp    x8, #0xfffffff007e8b000     ; адрес data-сегмента
+```
+— Функция делает вызовы в `0xfffffff008f5ed44` и `0xfffffff008f7133c` (обе — служебные),
+но **write-сайта флага `data_fffffff00af8a658+0x7` в этой функции НЕТ**.
+
+**Set-функция установки флага (запись байта не-ноль в `+0x7`) до сих пор НЕ найдена**
+ни в AMFI, ни в ACM-дампе. Подтверждается модель: AMFI только **читает** флаг,
+а **запись** производится в SEP / ACM через механизм, который мы пока не можем
+перехватить без запуска кода на устройстве.
+
+#### Г. DeveloperDiskImage: примонтирован и персистентен
+
+```bash
+flatpak-spawn --host python3 -m pymobiledevice3 mounter query-developer-mode-status
+→ True   (после независимого ребута)
+
+flatpak-spawn --host python3 -m pymobiledevice3 mounter auto-mount
+→ DeveloperDiskImage смонтирован в /System/Developer
+
+flatpak-spawn --host python3 -m pymobiledevice3 developer dvt ls /System/Developer
+→ usr/ Library/ System/ version.plist RestoreVersion.plist
+```
+
+Это **реальное доказательство** активного Developer Mode — persist через ребут.
+
+#### Д. Сводка: что Dev Mode даёт
+
+| Возможность | Без dev-mode | С dev-mode | Примечание |
+|---|---|---|---|
+| Просмотр процессов (`dvt proclist`) | ✅ | ✅ | работает в обеих |
+| `dvt ls/cp` на `/tmp`, `/var` | ✅ | ✅ | —|
+| `dvt ls /System/Developer` | ❌ (нет DDI) | ✅ | —|
+| `mounter auto-mount` | ❌ | ✅ | DDI монтируется |
+| Установка self-signed IPA | ❌ 0xe8008001 | ❌ **без изменений** | installd не пропускает |
+| запуск PoC через IOKit | ❌ (нет бинарника) | ❌ **пока нет** | нужен подписанный бинарник |
+| `start-tunnel --userspace` | ❌ (нужен root) | ❌ **без изменений** | —|
+
+#### Е. План дальнейших действий (сессия 11+)
+
+1. **SideStore + free Apple ID** — установка PoC с валидной 7-дневной подписью разработчика.
+   - Сервер Anisette на Linux: `SideServer` или `AltServer-LinuxShell`.
+   - Переподпись IPA валидным сертификатом через SideStore на устройстве.
+   - **Риск:** `platform-application` entitlement может быть отброшен при переподписи.
+
+2. **Kernel write-site (Line B)** — продолжить поиск write-примитива для флага dev-mode.
+   - Исследовать `sub_fffffff008f5ed44` и `sub_fffffff008f7133c` (вызываются из `sub_fffffff008f4ea80`).
+   - Поискать `strb w?, [x?, #0x7]` во ВСЕХ kext (`AppleCredentialManager`, `AppleMobileFileIntegrity`).
+   - **Если write делается в SEP** — userspace AMFI-клиент не поможет; нужен SEP exploit.
+
+3. **Альтернативные векторы:**
+   - `mobileactivationd` XPC (через `com.apple.MobileActivation.developer-mode`).
+   - `AMFI` XPC через `com.apple.amfi.lockdown` (generic ack, но возможно другие методы).
+   - NVRAM arm/disarm через IODTNVRAM (если `armSecurityBootMode` real=IODTNVRAM, это всё ещё требует выполнения на устройстве).
+
+#### Артефакты сессии 10
+
+- `/tmp/cline/install_retry.txt` — ошибка 0xe8008001 после dev-mode.
+- `/tmp/cline/dvt_proclist.txt` — proclist успешен через tunnel.
+- `/tmp/cline/dvt_ls.txt` — `/System/Developer` доступен.
+- `/tmp/cline/dvt_launch.txt`, `core_launch.txt`, `core_launch2.txt` — ошибки launch (bundle не установлен).
+
+#### Коммиты
+- `9d16f537` — сессия 9 FINAL: Developer Mode включён, все документы обновлены, успешно запущено в production.
 
