@@ -505,6 +505,23 @@ the AMFI segment. The DER no-entitlement check is the only semantic change in th
 > **Not committed to git:** the multi-GB `ipsws/`, `kernelcaches/`, and `extracted/`
 > directories (see `.gitignore`). Only the analysis artifacts are versioned.
 
+**Binary confirmation of §4 (Session 12 re-check):** the absence of the `UPL_PHYS_CONTIG`
+re-validation in `cluster_write_contig` / `cluster_read_contig` was re-verified directly
+against the stable kernelcache with `tools/macho_tool.py`:
+
+| Symbol | VA (`__TEXT_EXEC`) |
+|--------|--------------------|
+| `cluster_write_contig` | `0xfffffff00a3b4f00` |
+| `cluster_read_contig`  | `0xfffffff00a3bb554` |
+| `vm_map_get_upl`       | `0xfffffff00a3b10fc` |
+| `upl_phys_page`        | `0xfffffff00a71aeb4` |
+
+Second `vm_map_get_upl` is followed only by `cbnz w0` (return-code check) and then
+`upl_phys_page` — there is no `tst #0x40` / `tbz #6` on the returned `upl_flags`. Note that
+this documents the **absence of the re-check in the VFS layer**; whether the fix lives
+deeper (inside `vm_map_get_upl`) is still open, so this is a code-level observation rather
+than a proven exploitable condition.
+
 ---
 
 *© 2026 — `vvirel333`. For defensive security research only.*

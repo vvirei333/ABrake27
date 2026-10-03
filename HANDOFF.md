@@ -1,5 +1,5 @@
 # HANDOFF — iPhone iOS 27.0 vs 27.2 diff / AMFI dev-mode PoC
-> Дата последнего обновления: сессия 10 (2026-10-03).
+> Дата последнего обновления: сессия 12 (2026-10-03).
 
 ## Что это
 
@@ -826,4 +826,160 @@ flatpak-spawn --host python3 -m pymobiledevice3 developer dvt ls /System/Develop
 
 #### Коммиты
 - `9d16f537` — сессия 9 FINAL: Developer Mode включён, все документы обновлены, успешно запущено в production.
+
+---
+
+### Сессия 12: Linux-кросс-сборка PoC доведена до рабочего arm64-бинаря (run_dvt.sh) — заливка на устройство ещё НЕ реализована
+
+> **Дата:** 2026-10-03 (продолжение сессии 11).
+
+#### Что сделано
+
+1. **`poc/poc.c`** — убран подменный `#define kIOMainPortDefault kIOMasterPortDefault`;
+   теперь используется настоящий `kIOMainPortDefault` из SDK IOKit.
+2. **`poc/stubs/iokit_stub.h`** — для Linux syntax-check добавлен `#define kIOMainPortDefault ((mach_port_t)0)`
+   (SDK помечает `kIOMasterPortDefault` как unavailable; `kIOMainPortDefault` — корректное имя).
+3. **`run_dvt.sh`** — `SDKVER` теперь парсится через `plistlib` (бинарный `SDKSettings.plist`),
+   а не grep по тексту → корректно даёт `16.4`.
+4. **Линковка** — прямой `ld64.lld` + `-syslibroot` + `-undefined dynamic_lookup` (без `-framework`
+   процедуры драйвера clang, которая заглатывала `-arch`/`-platform_version`).
+
+#### Результат
+
+- На хосте CachyOS **сборка `arm64` прошла, бинарь собрался** (`poc/build/EnableAMFIDevMode`).
+
+#### ОСТАЛОСЬ (главный блокер)
+
+- ❌ **Заливка бинаря на iPhone отсутствует** — PoC ещё не перенесён на устройство.
+- ❌ **`dvt launch` падает**: передаётся хостовый путь с пробелом
+  (`/run/media/ivan/New Volume/...`) + бинарь не на устройстве.
+
+#### Следующие шаги (по приоритету)
+
+1. **Сделать заливку бинаря на устройство** через CoreDevice file-service:
+   - `propose-empty-file` создать пустой файл на `/tmp/EnableAMFIDevMode`.
+   - Открыть data-канал (`com.apple.coredevice.fileservice.data`) и записать байты.
+   - Либо написать маленький Python-хелпер, либо использовать готовый путь (если найдём).
+2. **Передать device-path без пробелов** в `dvt launch --stream "/tmp/EnableAMFIDevMode enable"`.
+3. Перезапустить `./run_dvt.sh enable`.
+4. Если всё работает — `git add poc/poc.c run_dvt.sh tools/macho_tool.py && git commit && git push origin main`.
+
+---
+
+### Сессия 11: Реверс kernelcache stable — подтверждён TOCTOU `UPL_PHYS_CONTIG` в `cluster_*_contig` (CVE-2025-43520)
+
+> **Цель (из «Следующих шагов» Сессии 1/4):** дизассемблировать
+> `cluster_write_contig`/`cluster_read_contig` в `kernelcaches/stable/24A446__iPhone14,5/kernelcache.release.iPhone14,5`
+> и проверить, есть ли **повторная валидация `UPL_PHYS_CONTIG`** сразу после второго `vm_map_get_upl`
+> (ветка `EINVAL`). Это прямой binary-ответ, закрывающий строки 82-90 HANDOFF (там была гипотеза,
+> что фикс «закрыт в iOS 26.1», но binary-реверса не было).
+
+#### Инструмент
+
+- Написан `tools/macho_tool.py` (stdlib-only): парсер `LC_SEGMENT_64` (VA↔file-offset),
+  AArch64-дизассемблер (ADRP/ADD, B/BL/B.cond, CBZ/CBNZ, TBZ/TBNZ, TST, AND/ORR-imm, PAC
+  `pacia/autia/braa/blraa`, LDR/STR, кодировщик logical-immediate), линейный дизасм и xref-сканнер.
+  Импорт проверен: `python3 -c "import macho_tool"`.
+- `.a2s` содержит только `__got_*` заглушки; **LC_SYMTAB отсутствует** (символьной таблицы функций нет).
+  Экспортная trie (`LC_DYLD_EXPORTS_TRIE` @ file `0x3ffc000`, размер `0x4b8`) даёт лишь `_upl_phys_page`,
+  `_upl_phys_page_unchecked`, `_uat_get_desc`, `_ubc_*` и т.п. — `cluster_*_contig`/`vm_map_get_upl`
+  **локальные**, имя восстанавливается только по строке-якорю (`"cluster_write_contig"`, `"cluster_read_contig"`,
+  `"vfs_cluster.c"` в `__PRELINK_TEXT`).
+
+#### Адреса (сегмент `__TEXT_EXEC`)
+
+| Символ | Адрес | Как опознан |
+|---|---|---|
+| `cluster_write_contig` | `0xfffffff00a3b4f00` | пролог `stp x22,x21 / x20,x19 / x29,x30`; xref на строку `"cluster_write_contig"` (`0xfffffff00a3b5074`) |
+| `cluster_read_contig` | `0xfffffff00a3bb554` | пролог `sub sp,#0x1c0` + `stp x28,x27…`; xref на строку `"cluster_read_contig"` (`0xfffffff00a3bb6ec`) |
+| `vm_map_get_upl` | `0xfffffff00a3b10fc` | `hint #127` (paciasp) + `sub sp,#0x1c0`; вызывается из обеих contig-функций с 9 аргументами |
+| `upl_phys_page` | `0xfffffff00a71aeb4` | `hint #95` + `cbz x0` + чтение `[x0,#0x14]`/`[x0,#0x20]` (поля UPL) → соответствует экспортируемому `_upl_phys_page` |
+
+#### `cluster_write_contig` — второй `vm_map_get_upl` (область `0xfffffff00a3b52d0`–`0xfffffff00a3b530c`)
+
+```
+0xfffffff00a3b52d4  movz x9, #0x104        ; flags-маска для vm_map_get_upl
+0xfffffff00a3b52d8  orr  w5, w8, w9        ; upl_flags |= …
+...
+0xfffffff00a3b52f0  bl   0xfffffff00a3b10fc ; vm_map_get_upl  ← ВТОРОЙ вызов
+0xfffffff00a3b52f4  cbnz w0, 0xfffffff00a3b53d8 ; if (kret != KERN_SUCCESS) → err
+0xfffffff00a3b52f8  orr  x0, sp, x21       ; ← СРАЗУ использует pl (upl)
+0xfffffff00a3b52fc  orr  x1, sp, x27
+0xfffffff00a3b5300  bl   0xfffffff00a71aeb4 ; upl_phys_page(pl,0)
+```
+
+#### `cluster_read_contig` — второй `vm_map_get_upl` (область `0xfffffff00a3bb974`–`0xfffffff00a3bb9a8`)
+
+```
+0xfffffff00a3bb978  movz x9, #0x145        ; flags-маска для vm_map_get_upl
+0xfffffff00a3bb97c  orr  w5, w8, w9        ; upl_flags |= …
+...
+0xfffffff00a3bb994  bl   0xfffffff00a3b10fc ; vm_map_get_upl  ← ВТОРОЙ вызов
+0xfffffff00a3bb998  cbnz w0, 0xfffffff00a3bbbdc ; if (kret != KERN_SUCCESS) → err
+0xfffffff00a3bb99c  orr  x0, sp, x21       ; ← СРАЗУ использует pl (upl)
+0xfffffff00a3bb9a0  orr  x1, sp, x27
+0xfffffff00a3bb9a4  bl   0xfffffff00a71aeb4 ; upl_phys_page(pl,0)
+```
+
+#### Проверка `UPL_PHYS_CONTIG` (бит 6 = `0x40`)
+
+Сканирован весь диапазон обеих contig-функций на **любой** способ теста бита 6 / `0x40`:
+`tst #imm`, `and #imm` (64/32-bit), `tbz #6`, `tbnz #6` (с точным декодированием logical-immediate).
+```
+cluster_write_contig [0xfffffff00a3b4f00 .. 0xfffffff00a3b5600]:  проверок бита 0x40 НЕТ
+cluster_read_contig   [0xfffffff00a3bb500 .. 0xfffffff00a3bbd00]:  только TST-x-#0x3ff @ 0xfffffff00a3bbcf8 (НЕ бит 6)
+```
+
+#### Вердикт
+
+**iOS 27.0.1 stable НЕ содержит ре-проверки `UPL_PHYS_CONTIG` после второго `vm_map_get_upl`.**
+- В обеих функциях сразу после `cbnz w0` (success) идёт `upl_phys_page(pl, 0)` без валидации
+  возвращённого `upl_flags` — паттерн TOCTOU из CVE-2025-43520 присутствует **в binary**.
+- Это меняет вывод строк 82-85 HANDOFF («фикс закрыт в iOS 26.1»): на 27.0.1 stable ветки
+  `if (!(upl_flags & UPL_PHYS_CONTIG)) error = EINVAL;` (ожидавшейся в XNU-патче) **в коде НЕТ**.
+- Причина расхождения: публичный drop `xnu/main` тоже не содержит патча (единственное вхождение
+  `UPL_PHYS_CONTIG` — стр. 6262 в `cluster_io_type`), т.е. фикс либо не слит в upstream, либо
+  реализован иначе (например, внутри `vm_map_get_upl`/`upl_phys_page`, что требует отдельной
+  проверки этих функций на ветку, отбраковывающую non-contig UPL).
+
+#### Следующие шаги (уточнение)
+
+1. Дизассемблировать тело `vm_map_get_upl` (`0xfffffff00a3b10fc`) и `upl_phys_page`
+   (`0xfffffff00a71aeb4`) — нет ли там внутренней проверки `UPL_PHYS_CONTIG` / `UPL_DEV_MEMORY`,
+   которая могла бы закрывать гонку «глубже» (и тем самым объяснить отсутствие ветки на уровне VFS).
+2. Повторить тот же скан для `kernelcaches/beta/...` и сравнить (нет ли в 27.2 добавленной `tst #0x40`).
+3. Артефакты: `/tmp/dis_write.txt`, `/tmp/read_full.txt`, `/tmp/find_bit6.txt`, `/tmp/prologs.txt`;
+   логика в `tools/macho_tool.py` (переиспользуема для beta).
+
+#### Верификация адресов (Сессия 12, независимая перепроверка)
+
+Все адреса выше перепроверены заново в Сессии 12 через `tools/macho_tool.py`
+(`load_segments` + `va_to_off` + `linear_disasm`) на том же stable-kernelcache — совпадение
+байт-в-байт с дизасмом Сессии 11:
+
+| Символ | VA | Пролог (повторно прочитанные байты) |
+|---|---|---|
+| `cluster_write_contig` | `0xfffffff00a3b4f00` | `a91857f6 stp x22,x21` / `a9194ff4 stp x20,x19` / `a91a7bfd stp x29,x30` |
+| `cluster_read_contig`  | `0xfffffff00a3bb554` | `d10703ff sub sp,#0x1c0` / `a9166ffc stp x28,x27` |
+| `vm_map_get_upl`       | `0xfffffff00a3b10fc` | `d503237f hint #127` (paciasp) / `d10703ff sub sp,#0x1c0` |
+| `upl_phys_page`        | `0xfffffff00a71aeb4` | `d503245f hint #95` / `b40004a0 cbz x0` / `b9401408 ldr w8,[x0,#0x14]` |
+
+Второй `vm_map_get_upl` (TOCTOU-точка) — подтверждён:
+
+```
+write:  0xfffffff00a3b52f0  bl 0xfffffff00a3b10fc   ; 2-й vm_map_get_upl
+        0xfffffff00a3b52f4  cbnz w0, 0xfffffff00a3b53d8
+        0xfffffff00a3b5300  bl 0xfffffff00a71aeb4   ; upl_phys_page(pl,0) — без ре-чека
+read:   0xfffffff00a3bb994  bl 0xfffffff00a3b10fc   ; 2-й vm_map_get_upl
+        0xfffffff00a3bb998  cbnz w0, 0xfffffff00a3bbbdc
+        0xfffffff00a3bb9a4  bl 0xfffffff00a71aeb4   ; upl_phys_page(pl,0) — без ре-чека
+```
+
+Скан бита 6 (`tst/ands #imm` + `tbz/tbnz #6`) по всему диапазону обеих функций: ре-валидации
+`UPL_PHYS_CONTIG` нет. Единственный logical-immediate тест в `cluster_read_contig` —
+`0xfffffff00a3bbcf8  f24a261f tst x16,#0x3ff` (НЕ бит 6).
+
+> **Оговорка:** это подтверждает отсутствие ре-чека **на уровне VFS**; вопрос эксплуатируемости
+> зависит от того, не закрыт ли баг внутри `vm_map_get_upl`/`upl_phys_page` («Следующие шаги» п.1),
+> поэтому формулировка «готов к эксплуатации» пока НЕ утверждается.
 

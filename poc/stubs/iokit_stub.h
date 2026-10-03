@@ -23,6 +23,9 @@ static inline mach_port_t mach_task_self(void) { return 1; }
 static inline mach_port_t mach_task_self_(void) { return 1; }
 
 #define kIOMasterPortDefault ((mach_port_t)0)
+/* iOS SDK marks kIOMasterPortDefault as unavailable; kIOMainPortDefault is the
+ * modern replacement. Both resolve to the same value (MACH_PORT_NULL / 0). */
+#define kIOMainPortDefault   ((mach_port_t)0)
 
 extern const char *IOServiceMatching(const char *name);
 extern io_service_t IOServiceGetMatchingService(mach_port_t mainPort,

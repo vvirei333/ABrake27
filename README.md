@@ -113,6 +113,31 @@ cat /tmp/amfi_devmode_poc.log
 # Then REBOOT to activate Developer Mode
 ```
 
+### Alternative: CoreDevice / DVT launch from Linux (`run_dvt.sh`)
+
+A second, **IPA-free** path exists: cross-compile the standalone IOKit binary on Linux and
+push it to the device through the iOS 17+ **CoreDevice / RSD tunnel**, then run it with the
+DVT process-control service (outside the App Sandbox — no `installd`, no free-sign IPA).
+
+```bash
+./run_dvt.sh enable      # build (clang + ld64.lld) → deploy → `dvt launch --stream`
+```
+
+`run_dvt.sh` automates the whole chain:
+
+1. starts/verifies `usbmuxd`, checks the device with `ideviceinfo` (libimobiledevice);
+2. cross-compiles `poc/poc.c` to a bare `arm64` Mach-O (no Apple toolchain):
+   `clang -c` → `ld64.lld -platform_version ios … -syslibroot … -undefined dynamic_lookup`;
+   the SDK version is read from the **binary** `SDKSettings.plist` via `plistlib`;
+3. opens a userspace RSD tunnel (pymobiledevice3) and invokes `dvt launch --stream`.
+
+> **Status:** the Linux cross-compile **works** (a real `arm64` Mach-O is produced). The
+> on-device deploy step is still **WIP** — see `HANDOFF.md` «Сессия 12». Also note the
+> PoC’s IOKit path (`AppleMobileFileIntegrity` selector 11) requires the
+> platform-restricted entitlement `com.apple.private.amfi.developer-mode-control`, so a
+> non-Apple-signed binary will be refused by the userclient even when launched via DVT —
+> the *supported* way to enable Developer Mode is the lockdown protocol documented above.
+
 ---
 
 ## How It Works
@@ -151,6 +176,8 @@ Auto-detects `clang-20...15`, `ld64.lld`/`lld`, `llvm-lipo`, `ldid`. Graceful fa
 │   ├── probe_amfi_service.py
 │   ├── final_verify.py
 │   └── verify_now.py
+├── run_dvt.sh               # ★ CoreDevice/DVT deploy (build + usbmuxd + RSD tunnel + launch)
+├── tools/macho_tool.py      #   stdlib-only Mach-O arm64e disassembler (kernelcache RE)
 ├── HANDOFF.md               # Full session log (Russian + English)
 └── README.md                # You are here
 ```

@@ -17,3 +17,7 @@ poc/SDK/
 poc/build/
 *.ipa
 
+
+# Python bytecode (never commit)
+__pycache__/
+*.pyc
