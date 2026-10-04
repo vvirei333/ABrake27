@@ -1,7 +1,7 @@
 
 # iOS Kernelcache Reverse Engineering — Handoff
 
-> Last updated: Session 21 (2026-10-04)
+> Last updated: Session 22 (2026-10-04)
 > Target: iPhone14,5 (iPhone 13, A15) / iOS 27.0.1 (24A446) and 27.2 (24B5089g)
 
 ## Project Overview
@@ -410,7 +410,7 @@ struct IOExternalMethodDispatch2022 {
 ---
 
 *Progress saved: Session 21, 2026-10-04. AppleSEPUserClient audit CLOSED — zero findings. Next: AMFI sel 6 (isCdhashInTrustCache).*
-```
+
 ### Session 22: AMFI sel 6 closed + diff phase 1
 
 **AMFI sel 6 (isCdhashInTrustCache) — CLOSED, SAFE:**
@@ -438,7 +438,9 @@ C-diff в очереди после завершения.
 **Артефакты:**
 - /tmp/amfi_sel6_verdict.md
 - /tmp/diff_security_ranked.md
-- poc/checkopen/ — in progress (test client для dynamic checkpoint)### Session 22 — Runtime test result: IOKit blocked by sandbox
+- poc/checkopen/ — in progress (test client для dynamic checkpoint)
+
+### Session 22 — Runtime test result: IOKit blocked by sandbox
 
 **Test:** check_open.ipa via SideStore (free Apple ID)
 - Bundle: com.poc.checkopen.WN7892LN76
@@ -456,6 +458,74 @@ provisioning). Free Apple ID is insufficient.
 
 **Fallback path:** static analysis + diff-driven hunting + userspace
 dynamic via lockdown/DVT services (no IOKit userclient dependency).
+
+### Session 22 (продолжение): Phase 1 завершён — Phase 2 готов
+
+**1. Beta kernelcache проанализирован (Ghidra):**
+- Beta: `ghidra_proj_beta/betakc` — auto-analysis завершён за **2414 сек (~40 мин)**
+- Stable: `ghidra_proj/sepkc` — готов
+- **Оба проекта готовы к Phase 2** (C-diff handler'ов stable ↔ beta)
+
+**2. IOKit runtime — заблокирован (dynamic path closed):**
+- `check_open.ipa` через SideStore: `IOServiceOpen = 0xe00002e2` (**kIOReturnNotPermitted**)
+- Причина: SideStore срезает platform-restricted entitlement
+  `com.apple.security.iokit-user-client-class` при переподписи на free Apple ID
+- **Динамика через IOKit на free Apple ID / iOS 27 не работает**
+- **Fallback:** static + diff + userspace via lockdown (без IOKit user client)
+
+**3. Phase 2 — следующий шаг:**
+- Построить пары handler'ов **stable ↔ beta по selector index**
+- AMFI (18 селекторов) + SEP (96 селекторов): таблицы **структурно идентичны** →
+  diff ожидается в handler-телах, а не в таблицах
+- **IOAVUserClient (10 → 11 селекторов) — приоритет №1**
+- Для каждой пары: декомпилировать обе версии → текстовый diff C →
+  классифицировать (новый / изменённый / идентичный)
+
+### Session 23 (2026-10-04): Phase 2 C-diff — AMFI ЗАВЕРШЁН (0 находок), IOAV в процессе
+
+**ВАЖНО — реальные имена Ghidra (paste был неверен):**
+- Проект ОДИН: `ghidra_proj/` с программами `amfi_stable` и `amfi_beta`.
+  НЕ `sepkc`/`betakc`, НЕТ каталога `ghidra_proj_beta`. `analyze=False` работает
+  (обе программы уже проанализированы и сохранены).
+- Корень проекта = `bigdata` → `/run/media/ivan/New Volume/My Projects/iphone-ios27-diff`
+  (симлинк `iphone-lockdownd-fuzzer/bigdata`). CLAUDE.md/HANDOFF.md/FINDINGS_LOCK.md тут.
+
+**AMFI Phase 2 — ВСЕ 18 СЕЛЕКТОРОВ ФУНКЦИОНАЛЬНО ИДЕНТИЧНЫ (stable ↔ beta).**
+- Таблица IOExternalMethodDispatch2022, stride 0x18, 18 входов.
+  - stable base `0xfffffff007e6c3a8`, beta base `0xfffffff007e8a648` (оба подтверждены:
+    sel6=isCdhashInTrustCache stable 0x8e8ab80 / beta 0x8f469c0; sel11 beta 0x8f46dd0).
+  - NULL-слоты (raw=0 в обоих, не реализованы): sel 0,1,3,8,10 → 13 реализовано.
+  - Сигнатуры (scalarIn/structIn/scalarOut/structOut) и размеры тел — идентичны по всем sel.
+  - Единственные «diff» — build-specific адреса: thunk_FUN_, PTR_DAT_ (stack canary),
+    PTR_PTR_ (property ptr). После нормализации → IDENTICAL ×18.
+  - sel11 armSecurityBootMode разобран построчно: отличия только canary/property глобали — косметика.
+- **DER-entitlement патч (Session 3-4) НЕ в dispatch-поверхности** (он в codesigning-пути
+  amfi_audit_no_entitlements), поэтому в handler-диффе его нет — это корректно.
+
+**Инструменты (переиспользуемые):**
+- `ghidra_proj/phase2_amfi.py` — generic: `python phase2_amfi.py <stable|beta> <base_hex>`.
+  Читает таблицу (18×0x18), страчивает PAC hi-биты, декомпилит каждый handler →
+  `/tmp/diff/amfi_<sel>_<variant>.c` + манифест. Запуск через ghidra_venv/bin/python.
+- `/tmp/diff/normdiff.py` — нормализатор+классификатор: `python3 normdiff.py <comp> <nsel>`.
+  Нормализация: адреса 0x…(6-16hex), (thunk_|j_)?(FUN|DAT|LAB|PTR|UNK|SUB|caseD|switchD)_+hex,
+  2-й проход — имена локалов (local_/uStack_/Var). Классы: IDENTICAL / IDENTICAL* (только имена) /
+  CHANGED / ADDED_SELECTOR / REMOVED_SELECTOR. Пишет `<comp>_<sel>.diff` для не-identical.
+- Артефакты: `/tmp/diff/amfi_*_{stable,beta}.c`, `amfi_manifest_{stable,beta}.txt`.
+  **ПРЕДУПРЕЖДЕНИЕ: /tmp эфемерен — при необходимости скопировать в bigdata/diff_output.**
+
+**IOAV — СЛЕДУЮЩИЙ ШАГ (приоритет, НЕ завершён):**
+- base: beta `0xfffffff007fa9510` (11 сел), stable `~0xfffffff007f15bd0` (10 сел, АДРЕС ПРИБЛИЗИТ.,
+  источник /tmp/diff_security_ranked.md — ПРОВЕРИТЬ базу+count перед декомпилом).
+- Сиблинг-селекторы = logging controls (setLogLevelMask, setEventLogCommandMask).
+- План: сделать generic `phase2_table.py` (argv: comp, variant, base, nsel) — обобщить phase2_amfi.py;
+  извлечь обе версии, спарить по индексу sel 0..9, **аудитировать НОВЫЙ 11-й selector (beta sel10)**.
+
+**SEP — после IOAV:** 96 сел, stable base `0xfffffff007ec73f8` (stride 0x18). Beta base НЕИЗВЕСТНА —
+найти (externalMethod/диспетчер beta). Phase 1: структурно идентично → ожидается diff в телах.
+Сначала только non-null (84 активных). Session 21 уже закрыл SEP handler-layer как safe на stable.
+
+**Результат-файл задачи:** `/tmp/diff_phase2_report.md` (AMFI-секция готова к записи; IOAV/SEP TODO).
+
 
 
 
