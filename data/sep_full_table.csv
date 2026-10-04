@@ -1,0 +1,98 @@
+selector,offset,func_va,scalarIn,structIn,scalarOut,structOut,is_null,body_va,name_hint,name_src
+0,0x3d60,0xfffffff00916722c,0,0,0,0,False,0xfffffff0091790b0,,
+1,0x3d78,0xfffffff009167260,0,0,0,0,False,0xfffffff009167260,"AppleSEP:WARNING: %s: this command is removed
+",self
+2,0x3d90,0xfffffff0091672a0,0,0,0,0,False,0xfffffff0091790b0,,
+3,0x3da8,0xfffffff0091672d0,1,0,1,0,False,0xfffffff0091712b0,,
+4,0x3dc0,0xfffffff009167324,0,0,1,0,False,0xfffffff0091790b0,,
+5,0x3dd8,0xfffffff009167374,1,0,0,0,False,0xfffffff0091790b0,,
+6,0x3df0,0xfffffff0091673bc,4,VAR,0,0,False,0xfffffff009179538,"IOReturn AppleSEPManager::setFirmwareBytes(IOMemoryDescriptor *, const uint64_t *, bool, bool)",body:0xfffffff009179538
+7,0x3e08,0xfffffff009167410,4,VAR,0,0,False,0xfffffff009179538,"IOReturn AppleSEPManager::setFirmwareBytes(IOMemoryDescriptor *, const uint64_t *, bool, bool)",body:0xfffffff009179538
+8,0x3e20,0xfffffff009167464,4,VAR,0,0,False,0xfffffff009179538,"IOReturn AppleSEPManager::setFirmwareBytes(IOMemoryDescriptor *, const uint64_t *, bool, bool)",body:0xfffffff009179538
+9,0x3e38,0xfffffff0091674b8,2,VAR,0,0,False,0xfffffff0091790ec,,
+10,0x3e50,0xfffffff009167638,0,0,0,0,False,0xfffffff0091790b0,,
+11,0x3e68,0xfffffff00916766c,0,0,0,0,False,0xfffffff0091790b0,,
+12,0x3e80,0xfffffff0091676a4,0,0,0,0,False,0xfffffff0091790b0,,
+13,0x3e98,0xfffffff0091676dc,0,0,1,0,False,0xfffffff00917ed64,,
+14,0x3eb0,0xfffffff009190290,0,0,2,VAR,False,0xfffffff00916ad0c,,
+15,0x3ec8,0xfffffff009167730,0,0,0,20,False,0xfffffff00916a7ec,,
+16,0x3ee0,0xfffffff009167740,0,0,0,0,False,0xfffffff0091790ec,,
+17,0x3ef8,,,,,,True,,,
+18,0x3f10,0xfffffff0091677e8,0,0,0,2048,False,0xfffffff0091677e8,AppleSEPARTService,self
+19,0x3f28,0xfffffff009167990,0,2048,0,0,False,0xfffffff0091790ec,,
+20,0x3f40,0xfffffff009167a00,0,0,0,0,False,0xfffffff0091790ec,,
+21,0x3f58,0xfffffff009167a54,1,VAR,0,16384,False,0xfffffff009179364,,
+22,0x3f70,0xfffffff009167dc0,1,VAR,1,0,False,0xfffffff0091794e4,"IOReturn AppleSEPManager::setFirmwareBytes(IOMemoryDescriptor *, const uint64_t *, bool, bool)",body:0xfffffff0091794e4
+23,0x3f88,0xfffffff009167ec8,0,0,1,VAR,False,0xfffffff0091794e4,"IOReturn AppleSEPManager::setFirmwareBytes(IOMemoryDescriptor *, const uint64_t *, bool, bool)",body:0xfffffff0091794e4
+24,0x3fa0,0xfffffff009167fa0,0,0,3,0,False,0xfffffff0091794e4,"IOReturn AppleSEPManager::setFirmwareBytes(IOMemoryDescriptor *, const uint64_t *, bool, bool)",body:0xfffffff0091794e4
+25,0x3fb8,0xfffffff00916801c,1,0,0,0,False,0xfffffff0091794e4,"IOReturn AppleSEPManager::setFirmwareBytes(IOMemoryDescriptor *, const uint64_t *, bool, bool)",body:0xfffffff0091794e4
+26,0x3fd0,0xfffffff00916806c,0,0,1,VAR,False,0xfffffff0091794e4,"IOReturn AppleSEPManager::setFirmwareBytes(IOMemoryDescriptor *, const uint64_t *, bool, bool)",body:0xfffffff0091794e4
+27,0x3fe8,0xfffffff009168158,0,0,1,VAR,False,0xfffffff0091794e4,"IOReturn AppleSEPManager::setFirmwareBytes(IOMemoryDescriptor *, const uint64_t *, bool, bool)",body:0xfffffff0091794e4
+28,0x4000,0xfffffff009168244,1,0,0,VAR,False,0xfffffff0091794e4,"IOReturn AppleSEPManager::setFirmwareBytes(IOMemoryDescriptor *, const uint64_t *, bool, bool)",body:0xfffffff0091794e4
+29,0x4018,0xfffffff009168324,2,0,1,0,False,0xfffffff0091794e4,"IOReturn AppleSEPManager::setFirmwareBytes(IOMemoryDescriptor *, const uint64_t *, bool, bool)",body:0xfffffff0091794e4
+30,0x4030,0xfffffff009168398,0,0,0,VAR,False,0xfffffff0091794e4,"IOReturn AppleSEPManager::setFirmwareBytes(IOMemoryDescriptor *, const uint64_t *, bool, bool)",body:0xfffffff0091794e4
+31,0x4048,0xfffffff009168470,1,VAR,0,0,False,0xfffffff009179310,,
+32,0x4060,0xfffffff0091684d8,1,4,0,0,False,0xfffffff009179310,,
+33,0x4078,0xfffffff009168540,3,0,3,1024,False,0xfffffff009179310,,
+34,0x4090,0xfffffff0091685d8,3,VAR,3,0,False,0xfffffff009179310,,
+35,0x40a8,0xfffffff009168670,1,0,1,1024,False,0xfffffff009179310,,
+36,0x40c0,0xfffffff009168704,0,0,2,0,False,0xfffffff0091790b0,,
+37,0x40d8,,,,,,True,,,
+38,0x40f0,,,,,,True,,,
+39,0x4108,,,,,,True,,,
+40,0x4120,,,,,,True,,,
+41,0x4138,0xfffffff0091687c0,0,VAR,0,0,False,0xfffffff00919c3e4,,
+42,0x4150,0xfffffff0091688e0,0,0,0,VAR,False,0xfffffff0091688e0,sep-booted,self?
+43,0x4168,0xfffffff009168a80,0,0,0,VAR,False,0xfffffff009168a80,sep-booted,self?
+44,0x4180,0xfffffff0091903b8,0,1024,0,0,False,0xfffffff0091903b8,xART,self
+45,0x4198,0xfffffff009168c18,0,1024,0,0,False,0xfffffff009168c18,xART,self
+46,0x41b0,0xfffffff009168f18,0,0,0,0,False,0xfffffff009168f18,xART,self
+47,0x41c8,0xfffffff009168f94,0,0,0,0,False,0xfffffff009168f94,xART,self
+48,0x41e0,0xfffffff00916902c,1,0,0,0,False,0xfffffff00916902c,hilo,self
+49,0x41f8,0xfffffff0091690c8,1,0,0,0,False,0xfffffff0091690c8,hilo,self
+50,0x4210,0xfffffff009169164,0,0,0,VAR,False,0xfffffff009169164,hilo,self
+51,0x4228,0xfffffff0091691dc,0,VAR,0,0,False,0xfffffff0091691dc,hilo,self
+52,0x4240,0xfffffff009169254,0,0,0,VAR,False,0xfffffff009169254,hilo,self
+53,0x4258,0xfffffff0091692cc,0,0,0,0,False,0xfffffff0091692cc,hilo,self
+54,0x4270,0xfffffff009169398,0,VAR,0,0,False,0xfffffff009169398,hilo,self
+55,0x4288,0xfffffff009169410,0,0,0,VAR,False,0xfffffff009169410,hilo,self
+56,0x42a0,0xfffffff009169488,0,VAR,0,0,False,0xfffffff009169488,hilo,self
+57,0x42b8,0xfffffff009169500,0,0,0,10,False,0xfffffff009169500,hilo,self
+58,0x42d0,0xfffffff009169580,1,0,0,0,False,0xfffffff009169580,hilo,self
+59,0x42e8,0xfffffff009169614,0,64,0,0,False,0xfffffff009169614,hilo,self
+60,0x4300,0xfffffff00916969c,0,0,0,176,False,0xfffffff00916969c,hilo,self
+61,0x4318,0xfffffff009169728,2,VAR,0,3145856,False,0xfffffff009169728,hilo,self
+62,0x4330,0xfffffff009169824,0,VAR,0,0,False,0xfffffff009169824,hilo,self
+63,0x4348,0xfffffff00916989c,0,0,0,0,False,0xfffffff00916989c,hilo,self
+64,0x4360,0xfffffff00916990c,1,0,0,0,False,0xfffffff00916990c,hilo,self
+65,0x4378,0xfffffff0091904c8,1,0,1,1024,False,0xfffffff009179310,,
+66,0x4390,0xfffffff009169990,0,0,0,0,False,0xfffffff0091790ec,,
+67,0x43a8,0xfffffff0091699e0,0,0,0,20,False,0xfffffff009170f20,,
+68,0x43c0,0xfffffff009169a30,0,0,0,20,False,0xfffffff00916a7ec,,
+69,0x43d8,0xfffffff0091905d0,0,0,0,0,False,0xfffffff0091905d0,test panic,self
+70,0x43f0,0xfffffff009169a40,1,0,0,0,False,0xfffffff009179310,,
+71,0x4408,0xfffffff009169aa0,0,0,0,VAR,False,0xfffffff00919c3e4,,
+72,0x4420,,,,,,True,,,
+73,0x4438,0xfffffff00919062c,0,0,0,3,False,0xfffffff0091907d8,,
+74,0x4450,0xfffffff009169b78,1,0,0,0,False,0xfffffff0091794e4,"IOReturn AppleSEPManager::setFirmwareBytes(IOMemoryDescriptor *, const uint64_t *, bool, bool)",body:0xfffffff0091794e4
+75,0x4468,0xfffffff009169bd8,1,28,3,0,False,0xfffffff0091794e4,"IOReturn AppleSEPManager::setFirmwareBytes(IOMemoryDescriptor *, const uint64_t *, bool, bool)",body:0xfffffff0091794e4
+76,0x4480,0xfffffff009169c74,2,28,0,0,False,0xfffffff0091794e4,"IOReturn AppleSEPManager::setFirmwareBytes(IOMemoryDescriptor *, const uint64_t *, bool, bool)",body:0xfffffff0091794e4
+77,0x4498,,,,,,True,,,
+78,0x44b0,,,,,,True,,,
+79,0x44c8,,,,,,True,,,
+80,0x44e0,,,,,,True,,,
+81,0x44f8,0xfffffff009169cec,0,0,0,0,False,0xfffffff009169cec,"static IOReturn AppleSEPUserClient::DispatchDynamicObjectOp(AppleSEPUserClient *, void *, IOExternal",self
+82,0x4510,0xfffffff009169d18,2,0,0,0,False,0xfffffff009169d18,"static IOReturn AppleSEPUserClient::DispatchDynamicObjectOp(AppleSEPUserClient *, void *, IOExternal",self
+83,0x4528,0xfffffff009169de4,0,0,1,20,False,0xfffffff009169de4,xART,self
+84,0x4540,0xfffffff009169f4c,0,0,0,0,False,0xfffffff0091794e4,"IOReturn AppleSEPManager::setFirmwareBytes(IOMemoryDescriptor *, const uint64_t *, bool, bool)",body:0xfffffff0091794e4
+85,0x4558,0xfffffff009169fb0,0,0,0,0,False,0xfffffff0091794e4,"IOReturn AppleSEPManager::setFirmwareBytes(IOMemoryDescriptor *, const uint64_t *, bool, bool)",body:0xfffffff0091794e4
+86,0x4570,0xfffffff00916a014,0,0,0,12,False,0xfffffff0091794e4,"IOReturn AppleSEPManager::setFirmwareBytes(IOMemoryDescriptor *, const uint64_t *, bool, bool)",body:0xfffffff0091794e4
+87,0x4588,,,,,,True,,,
+88,0x45a0,,,,,,True,,,
+89,0x45b8,0xfffffff0091906e0,3,0,1,1024,False,0xfffffff009184dcc,AppleSEPSharedMemoryChannel,body?:0xfffffff009184dcc
+90,0x45d0,0xfffffff00916a0e4,0,0,0,VAR,False,0xfffffff00919c3e4,,
+91,0x45e8,0xfffffff00916a228,1,0,0,0,False,0xfffffff0091794e4,"IOReturn AppleSEPManager::setFirmwareBytes(IOMemoryDescriptor *, const uint64_t *, bool, bool)",body:0xfffffff0091794e4
+92,0x4600,0xfffffff00916a290,2,0,0,0,False,0xfffffff00916a290,xART,self
+93,0x4618,0xfffffff00916a320,1,0,1,0,False,0xfffffff00916a320,xART,self
+94,0x4630,0xfffffff00916a3c4,0,0,1,0,False,0xfffffff00917d4e8,,
+95,0x4648,0xfffffff00916a400,0,0,0,8,False,0xfffffff00919c3e4,,

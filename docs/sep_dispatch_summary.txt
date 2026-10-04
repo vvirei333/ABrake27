@@ -1,0 +1,15 @@
+# SEP IOExternalMethodDispatch2022 reconstruction
+region_VA=0xfffffff007ec3698  region_fileoff=0xebf698
+stride=0x18  layout={func(8),scalarInputCount(u32),structInputSize(u32),scalarOutputCount(u32),structOutputSize(u32)}
+0xffffffff in a size field == kIOUCVariableStructureSize
+total_dispatch_tables=19
+total_entries=124
+
+wrapper1 0x02163730: table 5, selector(index)=15, table_base_off=0x3d60, table_entries=17
+  table1_base_VA=0xfffffff007ec73f8
+wrapper2 0x02165a30: table 7, selector(index)=27, table_base_off=0x4138, table_entries=31
+  table2_base_VA=0xfffffff007ec77d0
+getOrGenerateNonce 0x0218d8d0: NOT FOUND in any dispatch table
+
+base_from_FUN_9177388=PENDING (needs Ghidra decompile)
+base_matches=PENDING

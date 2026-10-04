@@ -21,3 +21,7 @@ poc/build/
 # Python bytecode (never commit)
 __pycache__/
 *.pyc
+
+# Sensitive: device pairing private keys / signing cache — never commit
+*.mobiledevicepairing
+.zsign_cache/
