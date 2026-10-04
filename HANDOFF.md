@@ -411,6 +411,35 @@ struct IOExternalMethodDispatch2022 {
 
 *Progress saved: Session 21, 2026-10-04. AppleSEPUserClient audit CLOSED — zero findings. Next: AMFI sel 6 (isCdhashInTrustCache).*
 ```
+### Session 22: AMFI sel 6 closed + diff phase 1
+
+**AMFI sel 6 (isCdhashInTrustCache) — CLOSED, SAFE:**
+- Полная цепочка: handler 0x8e8ab80 → copyBytes (256MB cap, exact-size)
+  → parser 0x8e97754 → lookup 0x8ea4244 → FUN_a741590
+- FUN_a741590 = **TXM (Trusted Execution Monitor) RPC gateway**
+- На A15/T8110 trust-cache проверка делегирована в TXM
+- Kernel только маршалит TXM-сообщение: bounds-checked arg count (0-7),
+  bounded return words (≤6)
+- Ноль kernel-side memory bug
+- **Побочный вывод:** TXM = новая security surface iOS 26+ (отдельный
+  security domain, kernel r/w не даёт доступ)
+
+**Diff Phase 1 (structural):**
+- 51 IOExternalMethodDispatch2022 tables в обоих билдах
+- AMFI: идентично (18 селекторов)
+- SEP: идентично (96 селекторов)
+- 15 paired tables: ноль сигнатурных изменений
+- **ЕДИНСТВЕННОЕ изменение:** IOAVUserClient 10→11 селекторов в beta
+
+**Phase 2 (handler C-diff):** Beta kernelcache импортирован в Ghidra
+(Mach-O arm64e, 514327 chained pointers), auto-analysis running.
+C-diff в очереди после завершения.
+
+**Артефакты:**
+- /tmp/amfi_sel6_verdict.md
+- /tmp/diff_security_ranked.md
+- poc/checkopen/ — in progress (test client для dynamic checkpoint)
+
 
 
 
