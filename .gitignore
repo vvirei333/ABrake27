@@ -25,3 +25,14 @@ __pycache__/
 # Sensitive: device pairing private keys / signing cache — never commit
 *.mobiledevicepairing
 .zsign_cache/
+
+# secrets
+*.p12
+*.pfx
+*.mobileprovision
+*.mobiledevicepairing
+*.key
+*.pem
+id_rsa*
+.zsign_cache/
+**/.zsign_cache/
