@@ -526,6 +526,155 @@ dynamic via lockdown/DVT services (no IOKit userclient dependency).
 
 **Результат-файл задачи:** `/tmp/diff_phase2_report.md` (AMFI-секция готова к записи; IOAV/SEP TODO).
 
+### Session 23 (cont.): Coredump lead — CLOSED (not attack surface)
+
+Investigated `triggerCoredumpViaUserClient` in **stable 27.0.1** (`24A446__iPhone14,5`).
+**Verdict: closed — this is NOT attack surface.**
+
+#### Finding: it is a C++ method, NOT an IOKit UserClient selector
+- `triggerCoredumpViaUserClient` is a **method name of class `AppleBasebandSPMIHEB`**
+  (baseband/SPMI subsystem), **not** a UserClient selector, not `externalMethod`,
+  not a dispatch-table entry. There is no `IOAVUserClient`-style proto string for it.
+- **Proof of string type:** the literal sits in `__cstring` **immediately before** its own
+  log format, and the format is `%06ld.%06d %s::%s:` = `<class>::<method>` — i.e. the
+  2nd `%s` is the method name:
+  - `0xfffffff007386725` `"triggerCoredumpViaUserClient\0"`
+  - `0xfffffff007386740` `"%06ld.%06d %s::%s: Triggering coredump via user client\n\0"`
+
+#### Addresses (stable)
+| item | VA | size |
+|---|---|---|
+| `triggerCoredump` (orchestrator, caller) | `0xfffffff0085a87e8` | 556 B |
+| `triggerCoredumpViaUserClient` | `0xfffffff0085a8534` | 692 B |
+| `triggerCoredumpViaKernel` (fallback) | `0xfffffff0085a8110` | 1060 B |
+
+- **Outside the SEP range** `0x9150000–0x919FFFF` → not SEP code.
+- xrefs: 4 for `…ViaUserClient` (all inside its own method — trace-log call sites),
+  8 for `…ViaKernel`, 1 caller of each (`triggerCoredump` @ `0xfffffff0085a87e8`).
+
+#### Mechanism
+```
+triggerCoredump (FUN_fffffff0085a87e8)   "Triggering coredump due to a SPMI error"
+  ├─ triggerCoredumpViaUserClient (FUN_fffffff0085a8534)   try first
+  │     sar = this->field_0xA8;              // "SAR Service KEXT" instance
+  │     if (!sar) return 0xe00002d8;          // "SAR Service KEXT instance is not ready"
+  │     handle = this->vtable[0x1e8/8](this, 0);
+  │     return sar->vtable[0x3a8/8](sar, …, 0xffffffffe00002e9, 4, handle, 0);
+  │     //  ret != 0 → log "…falling back to kernel method"
+  └─ triggerCoredumpViaKernel (FUN_fffffff0085a8110)
+        heb = this->field_0x88;               // SPMI HEB object
+        if (!heb) return 0xe0000001;          // "Invalid SPMI HEB object…"
+        r = heb->vtable[0x550/8](heb, 0);     // trigger SPMI coredump interrupt
+```
+- The "user client" is **another in-kernel kext service (SAR Service)**, reached via a
+  **C++ virtual call** (`sar->vtable[0x3a8]`) — **not** `IOConnectCall*` /
+  `IOExternalMethodDispatch`. → **not reachable from userspace.**
+
+#### Corroborating strings (same `__cstring` neighborhood)
+`AppleBasebandSPMIHEB` (`0xfffffff0073892f8`), `registerSARServiceKEXTInstance_block_invoke`,
+`Failed to communicate with SAR Service KEXT instance (ret: 0x%x)`,
+`Crashing baseband due to %u failed billboard transactions`, billboard protocol strings.
+Related kext: `com.apple.driver.AppleSART` (`AppleSARTMarconi`, `IOSARTMapper`,
+`IOCoastGuardSARTMapper`, `AppleSART.kext`).
+
+#### `kern_register_coredump_helper` — kernel-internal API
+- Found at `0xfffffff0074b80aa`, but in block **`__os_log`**, i.e. an **os_log
+  type/subsystem string, not code**. **0 xrefs on code.** Context confirms it is only
+  used as a log label: `"kern_register_coredump_helper failed. ret: 0x%x"` (ISPCoredump).
+- Treat as a **kernel-internal API name**, not a reachable symbol. (Also note:
+  `kern_coredump_routine` and `coredump_encryption_key` do **not** exist in stable —
+  they are beta-only additions.)
+
+#### Verdict
+- **Not attack surface.** No UserClient, no dispatch table, no selector, no
+  `IOServiceOpen`, no entitlement check. Reachable **only** through the baseband error
+  path (SPMI error / too many failed billboard transactions), which userspace cannot
+  reach by any normal means.
+- **Defense-in-depth note only:** the baseband crash path has **no entitlement gate**
+  and has an unconditional `triggerCoredumpViaKernel` fallback. Worth revisiting **only
+  if** a userspace → SPMI-error-injection primitive is ever found
+  (`AppleBasebandSPMIHEB`, vtable `+0x550` and `+0x3a8` are the interesting hooks).
+
+#### Gaps / not resolved
+- `/tmp/sep_full_table.csv` **does not exist** → the cross-check against the "12 null SEP
+  selectors" was not possible (moot anyway: these are method names, not selectors).
+- `0xe00002d8` / `0xffffffffe00002e9` not decoded to `kIOReturn*` names (the local SDK
+  headers contain no such table). Elsewhere in this project `0xe00002e2` was observed as
+  kIOReturnNotPermitted.
+- Ghidra imports the KC monolithically (`__text`/`__cstring`/`__os_log`, no per-kext
+  blocks) → kext attribution was made from string adjacency, not from block ownership.
+
+#### Artifacts
+- Report: `/tmp/coredump_e_check.md` (151 lines) · `/tmp/string_va.txt` ·
+  `/tmp/coredump_caller.c` (248 lines).
+- Reusable headless Java scripts (new, in `tmp/ghidra_scripts/`):
+  - `CdCheck.java` — string → xref → containing fn → decompile; writes the two files above.
+  - `CdClass.java` — memory-block names, callers, constant values, class probes.
+  - Invocation: `analyzeHeadless <proj> amfi_stable -process 'kernelcache.release.iPhone14,5' -noanalysis -readOnly -scriptPath <dir> -postScript X.java`
+  - Gotchas hit: GhidraScript has **no `mem` field** (use `currentProgram.getMemory()`);
+    `getFunctionAt(Address)` is **final** in `FlatProgramAPI` (rename your helper);
+    `import ghidra.program.model.mem.Memory` is required explicitly.
+- Logs: `tmp/cd_check.log`, `tmp/cd_class.log`, `tmp/coredump_e_check.md` (workspace copy).
+### Session 22 (cont.): IOAVUserClient — CLOSED (cosmetic redesign, not security-relevant)
+
+Both dispatch tables decoded and every handler decompiled; paired **by body, not by index**.
+
+**Verdict: closed — not security-relevant. Cosmetic redesign between the two builds.**
+
+#### Tables
+| | stable 27.0.1 | beta 27.2 |
+|---|---|---|
+| base | `0xfffffff007f15bd0` | `0xfffffff007fa9510` |
+| selectors | 10 (all implemented) | 11 (all implemented) |
+| dispatcher | **not located** (analysis gap) | `FUN_fffffff00980720c` (via ref@`0xfffffff009807228`) |
+
+- **No proto string** for `IOAVUserClient::externalMethod` in either KC (8 other user clients do
+  emit one) — the class is reached via its meta-class ctors `FUN_fffffff00973eb54` /
+  `FUN_fffffff00973f4d0` → `OSMetaClass::OSMetaClass("IOAVUserClient", PTR_DAT_fffffff007f954f0, 0x100)`.
+- Both bases were **validated from memory content**, not from `umull #0x18` (block `__const`,
+  all targets in `__text`, sane scalar/struct fields).
+
+#### Shape of the redesign
+- **Stable:** thick inline handlers, each performing its own **typed-object lookup**.
+- **Beta:** thin trampolines; the provider is reached through the **`this+0x100` vtable slot**
+  and the handler forwards immediately (e.g. sel10 → `(**(code **)(**(long **)(param_1 + 0x100) + 0x20))(...)`).
+- **Zero matching bodies** between the builds (0 shared callee-body hashes out of 11 stable /
+  5 beta) — but this reflects **different implementations, not different versions of one
+  function**: the work moved from per-handler inline code into the shared provider vtable.
+- Duplicate bodies exist *within* each build (stable sel4≡sel9, sel6≡sel7; beta sel3≡sel4,
+  sel0≡sel1) — one more reason index-based pairing is invalid here.
+
+#### Misclassification corrected
+- Earlier note in `tmp/ioav_matching.md` called `thunk_FUN_fffffff00a871144(param_1,
+  PTR_DAT_fffffff007f14f60)` a "capability gate" and speculated about **reduced access control**.
+  **Wrong:** it is a **typed-object lookup**, not an entitlement check. Corrected in the report.
+- **No entitlement is enforced at the beta dispatch layer** (`FUN_fffffff00980720c`) either.
+
+#### Methodology notes (new, reusable)
+- **Ghidra's Java script compiler is broken on this host** — every `-postScript X.java` fails with
+  `Failed to get OSGi bundle containing script`, with no `error:` output and an empty
+  `osgi/compiled-bundles/<id>/`. Not caused by script contents, script path (fails on NVMe too),
+  `TMPDIR`, or a stale cache (cleared `compiled-bundles` + `felixcache`). Observed while `/tmp`
+  (tmpfs 7.8 GB) was transiently at 100%, but the first failure preceded that.
+- **Working alternative: PyGhidra 3.1.0** in `/home/ivan/projects/iphone-lockdownd-fuzzer/ghidra_venv`
+  — `pyghidra.open_program(BIN, project_location=…, project_name=…, analyze=False,
+  nested_project_location=False)`, then `DecompInterface.decompileFunction(func, t, monitor)`.
+  Scripts: `tmp/ioav_dump.py`, `tmp/ioav_split_beta.py`, `tmp/ioav_callees.py`, `tmp/ioav_match2.py`.
+- Splitting a mis-merged function headlessly: `FunctionManager.removeFunction(entry)` +
+  `DisassembleCommand(addr, None, True)` + `CreateFunctionCmd(addr)`. (`RemoveFunctionCmd` does
+  **not** exist in `ghidra.app.cmd.function`.)
+- Kernel VAs are **unsigned** 64-bit — parse with `BigInteger(hex,16).longValue()`, never
+  `Long.parseLong` (top bit set).
+- Cross-build handler matching must fingerprint **callees by their own normalized body hashes**;
+  callee addresses change every build, their logic does not.
+- Headless output is prefixed `INFO  <Script>.java> ` — filter on that prefix or you will discard
+  the entire script output.
+
+#### Artifacts
+`/tmp/ioav_matching.md`, `/tmp/ioav_stable/` (10 `.c`), `/tmp/ioav_beta/` (11 `.c`),
+`/tmp/ioav_diffs/`, `tmp/ioav_analysis.md`, `tmp/ioav_callees_{stable,beta}.json`,
+`tmp/ioav_matching.md` (workspace copies).
+
 
 
 
