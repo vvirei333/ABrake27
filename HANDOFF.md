@@ -438,7 +438,24 @@ C-diff в очереди после завершения.
 **Артефакты:**
 - /tmp/amfi_sel6_verdict.md
 - /tmp/diff_security_ranked.md
-- poc/checkopen/ — in progress (test client для dynamic checkpoint)
+- poc/checkopen/ — in progress (test client для dynamic checkpoint)### Session 22 — Runtime test result: IOKit blocked by sandbox
+
+**Test:** check_open.ipa via SideStore (free Apple ID)
+- Bundle: com.poc.checkopen.WN7892LN76
+- Installed OK, launched, exited 0
+- `IOServiceGetMatchingService("AppleMobileFileIntegrity") = 0x1c03` (found)
+- `IOServiceOpen = 0xe00002e2` (**kIOReturnNotPermitted**)
+
+**Cause:** SideStore strips platform-restricted entitlement
+`com.apple.security.iokit-user-client-class` when re-signing with free Apple ID.
+Sandbox blocks `IOServiceOpen` regardless of bundle install success.
+
+**Verdict:** Dynamic IOKit testing on iOS 27 requires platform-signed binary
+(paid developer account + device registration + explicit IOKit entitlement
+provisioning). Free Apple ID is insufficient.
+
+**Fallback path:** static analysis + diff-driven hunting + userspace
+dynamic via lockdown/DVT services (no IOKit userclient dependency).
 
 
 
