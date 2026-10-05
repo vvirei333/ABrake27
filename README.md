@@ -184,6 +184,12 @@ Auto-detects `clang-20...15`, `ld64.lld`/`lld`, `llvm-lipo`, `ldid`. Graceful fa
 
 ---
 
+## Findings
+
+- **Session 26**: GPSCopy OOB-write (ImageIO) — confirmed statically, silently patched in 27.2 beta. Details in WRITEUP.md.
+
+---
+
 ## Deep Dive
 
 📄 **[Full Whitepaper → `docs/WHITEPAPER.md`](docs/WHITEPAPER.md)** — binary diff of `vnode_check_signature`,

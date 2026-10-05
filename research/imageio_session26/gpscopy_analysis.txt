@@ -1,0 +1,158 @@
+GPSCopy deep-dive + ImageIO Track C follow-ups — iOS 27.0.1 (24A446) vs 27.2 beta (24B5089g)
+=============================================================================================
+
+1. WRITE-PATH VERDICT: OOB-WRITE CONFIRMED (not read-only)
+------------------------------------------------------------
+GPSCopy::processData() contains 4 calls to j___platform_memmove (the actual copy/write
+primitive into the destination GPS-info buffer at `this+0x20`). All 4 write the result of
+GPS-IFD manipulation back into the (realloc'd) output buffer.
+
+STABLE (disasm: GPSCopy_stable_processData.asm, 265 lines):
+  All 4 memmove call sites compute their `len` (x2) argument via raw pointer-subtraction
+  arithmetic (e.g. `sub x8,x10,x21; sub x8,x8,x25; sub x2,x8,#0x1a`) directly from offset/count
+  fields read out of the GPS IFD being parsed — fields that are read via the (also unchecked)
+  `GPSCopy::read32()`. There is **zero bounds-check call anywhere in this function** (only
+  calls: read32 x3, adjustIFDOffsets x4, the 4 memmoves, and one path-selection comparison
+  `cmp x23,x8; b.hs` that merely picks which of two code branches to take — it does not validate
+  the length actually passed to any individual memmove).
+
+BETA (disasm: GPSCopy_beta_processData.asm, 486 lines):
+  Same overall control-flow skeleton (same adjustIFDOffsets calls, same branch structure), but
+  now carries 42 calls to checkCapacity/checkInitializedLength/pointerToOffset/read32Unchecked.
+  Critically: **every one of the 4 memmove call sites is immediately preceded by a
+  `checkCapacity(dst_or_related_ptr, len)` call using the EXACT SAME `len` (x2) value that is
+  then passed to memmove** — confirmed by register-level inspection at all 4 sites (offsets
+  0x...bcc4/0x...bcd0, 0x...be88/0x...be98, 0x...bf6c/0x...bf80, 0x...bf90/0x...bf9c in the beta
+  binary). `checkCapacity` throws the new `OutOfBounds` C++ exception on failure.
+
+  => In stable, a GPS IFD with an offset/count field engineered to make one of these
+  pointer-subtraction length computations underflow (interpreted as unsigned => huge size_t) or
+  simply exceed the destination buffer's actual allocated size will cause `memmove` to copy past
+  the end of a heap buffer that was just `reallocf`'d to a size computed from the (also
+  attacker-influenced) `CreateGPSBufferFromPropertiesTIFFNew(...)` output. This is a **heap
+  out-of-bounds WRITE**, not merely a read — the severity class changes from info-leak to
+  memory-corruption/potential-RCE-primitive, matching the user's hypothesis.
+
+  Note: `GPSCopy::read32()`/`read32Unchecked()` (the raw 4-byte-read primitive used throughout)
+  is itself **byte-for-byte identical** between stable and beta — confirmed instruction by
+  instruction. The fix is entirely about gating every existing read/write site, not about
+  changing the underlying read/write primitives.
+
+2. SOURCE / REACHABILITY
+--------------------------
+Public C entry point found (exported `T` symbol, not `t`/static):
+
+    Boolean CGImageCopyFileWithGPSInformation(CFStringRef srcPath, CFStringRef dstPath,
+                                               CFDictionaryRef properties);
+
+  (signature reconstructed from the beta disasm: x0=srcPath, x1=dstPath, x2=properties dict;
+  stored directly into the GPSCopy object's fields at offset 0x0/0x8/0x10 before calling
+  `GPSCopy::copyFileWithGPSInformation()`.)
+
+  This is a **file-path-based API**, not a CGImageSource/in-memory-buffer API — the caller must
+  already have a source file path and a destination path. `copyFileWithGPSInformation()` itself
+  calls `readInputFile` -> `processData` -> `writeOutputFile`.
+
+  Confirmed via adjacent symbols that this operates on the TIFF/EXIF GPS IFD embedded in the
+  source file (`TIFF_FileWriter::HasGPSInfoIFD`, `TIFF_MemoryReader::HasGPSInfoIFD` are both
+  present nearby) — i.e. it reads an **already-existing GPS IFD in the attacker-supplied file**
+  and inserts/updates tags in place. This covers both raw TIFF files and JPEG files (JPEG EXIF
+  metadata is the same TIFF IFD structure embedded in the APP1 segment), consistent with the
+  "19 CVE 2026" ImageIO framing — GPS/EXIF-IFD parsing bugs are a long-standing ImageIO CVE
+  class.
+
+  NOT confirmed this session (would require tracing imports across other frameworks —
+  PhotoLibraryServices, MobileSlideShow/Photos.app, Messages/MobileSMS, Mail — none of which
+  were extracted/inspected in this pass):
+    - Which exact OS-level UI flow calls `CGImageCopyFileWithGPSInformation` (best-guess
+      candidates, NOT verified: Photos.app "Remove Location" share-sheet option when sending a
+      photo; GPS-embedding into a saved Camera Roll copy at capture time; a similar step in
+      Mail/Messages attachment preparation). None of these guesses should be treated as
+      confirmed reachability — this is the single biggest open question for anyone escalating
+      this finding.
+    - Whether CGImageSource's higher-level APIs (CreateImageAtIndex, CreateThumbnailAtIndex,
+      CopyPropertiesAtIndex) reach this code path at all — based on the file-path signature,
+      they likely do NOT; this looks like a distinct, separate "copy with GPS info" utility
+      function, not part of the generic image-decode path that thumbnail/preview generators
+      (iMessage previews, WebKit image rendering, Quick Look) normally use. **This substantially
+      narrows the "trivial drive-by via message preview" framing from the task** — the bug looks
+      real and serious, but likely requires the specific GPS-copy/strip codepath to be invoked,
+      not just "any app that decodes the image."
+
+3. TRIGGER (structural description, not a working payload — recon only per task scope)
+------------------------------------------------------------------------------------------
+GPSCopy parses a classic TIFF IFD structure embedded as the file's existing GPS-info block:
+  - 2-byte byte-order marker ("II"=0x4949 little-endian / "MM"=0x4d4d big-endian) — read and
+    validated (bails out on anything else).
+  - Walks a sequence of 12-byte IFD entries (tag:2, type:2, count:4, value/offset:4), looking
+    for specific tags (0x8769 = ExifIFD pointer, 0x8825 = GPSInfoIFD pointer) to decide where to
+    insert/update the new GPS block.
+  - The vulnerable computations are all of the form `(existing_IFD_offset_field) -
+    (another_offset_or_base) [- yet_another_term]` feeding directly into a memmove length, with
+    no clamp against the actual buffer's capacity or the "initialized" (actually-read-from-file)
+    length in stable.
+
+  Minimal trigger SHAPE (structural, non-executable description): a source JPEG/TIFF file whose
+  embedded GPS IFD (or the Exif IFD pointing to it) contains an internally-inconsistent
+  offset/count — e.g. a GPS IFD entry's declared tag-count or next-IFD-offset field pointing
+  earlier than, or overlapping with, data already consumed/accounted for elsewhere in the same
+  parse — such that one of the four pointer-difference computations above underflows or exceeds
+  the buffer's true allocated size, before being handed to `memmove` as the copy length.
+
+  One-shot test (per GLM SoP): feeding such a file to `CGImageCopyFileWithGPSInformation` in
+  **stable** proceeds straight to the oversized/underflowed `memmove` (heap corruption, crash at
+  best, corruption-controlled-by-attacker-fields at worst). The **same** file, fed to **beta**,
+  hits one of the 42 `checkCapacity`/`checkInitializedLength` calls first and throws `OutOfBounds`
+  — operation aborted cleanly, no copy performed. Not constructed or tested this session (no
+  IPSW/device-side execution attempted, no byte-exact payload built — out of scope per task).
+
+4. TWO QUICK LEADS
+---------------------
+- **"*** DDS/ASTC: image dimensions overflow"** (new string in beta): **NOT LOCALIZED** this
+  session. Checked `CreateReader_DDS_ASTC()` (just a constructor, doesn't reference it) and
+  `IIO_Reader_ASTC::getImageCount` (91 lines, no reference either). Found and ruled OUT a
+  plausible-looking decoy: `ASTCTextureImp::decodeRGBXFromLinear` contains a **different**,
+  pre-existing (present in BOTH stable and beta — verified by direct string search in both
+  binaries) overflow guard ("*** ERROR: Integer overflow in buffer size calculation (blockDim:
+  %ux%u)") that checks `blockW*blockH*blockSize` via a widening `umull` + zero-result test — this
+  is NOT the new string from the task and NOT part of the beta-only patch; flagging this
+  explicitly so it isn't mistaken for the lead. The real "image dimensions overflow" guard's
+  containing function remains unknown — `ipsw`'s CLI has no generic "xref to a string literal's
+  address" search; finding it would need either a scripted linear scan of the DDS/BC-related
+  function set or loading the DSC fully into Ghidra.
+
+- **rlebuf allocation size format `%d` (stable) -> `%llu` (beta)**: **NOT LOCALIZED** (containing
+  function not found this session — likely in a PICT/TGA/BMP-style RLE decoder, judging by
+  "rlebuf" naming; not one of the symbol sets already extracted). Format-string widening from
+  32-bit to 64-bit for a buffer-allocation-size diagnostic is circumstantially consistent with
+  the same integer-overflow-in-size-calculation bug class as the (ruled-out) ASTC check above,
+  but this was **not confirmed** — could equally be an unrelated type cleanup unless the actual
+  allocation call site is inspected. Flagged as a lead only, not a verdict.
+
+5. COLD-PATH QUICK VERDICTS
+------------------------------
+- `EXRReadPlugin::decodeBlockAppleEXR(...).cold.6`: logs `"*** axr_decoder_create failed\n"`.
+  **DISCARD** — this is an existing-pattern error handler for a decoder-creation-call failure
+  (resource/allocation failure path), not a new bounds/overflow guard. The new ".cold.6" numbering
+  most likely reflects the compiler needing one more cloned error-handler block due to an
+  unrelated code change elsewhere in the function (e.g. one more call site to
+  axr_decoder_create), not a new validation.
+- `BCReadPlugin::decodeDXTCtoRGBX(...).cold.1`: logs `"*** BC - no compressed data for level
+  %d\n"`. **Borderline, low priority** — this is a null/missing-resource check (guards against
+  processing a BC mip level whose compressed-data pointer is absent), not a length/offset bounds
+  check on attacker-controlled arithmetic. Could plausibly fix a null-pointer-deref DoS, but
+  doesn't match the GPSCopy-class "guard validates a parser-derived offset/length" pattern GLM
+  described. Not escalated.
+
+SUMMARY TABLE
+----------------
+| Item                                   | Verdict                                              |
+|-----------------------------------------|-------------------------------------------------------|
+| GPSCopy write-path                      | **CONFIRMED OOB-WRITE** (not just read)               |
+| GPSCopy source/API                      | CGImageCopyFileWithGPSInformation(src,dst,props)       |
+| GPSCopy reachability from UI             | NOT CONFIRMED (needs Photos/Messages/Mail import trace)|
+| GPSCopy trigger                          | structural shape described; no payload built           |
+| DDS/ASTC "image dimensions overflow"     | NOT LOCALIZED; one decoy ruled out                    |
+| rlebuf %d->%llu                         | NOT LOCALIZED; lead only                               |
+| EXRReadPlugin cold.6                     | DISCARD (resource-failure log, not a guard)            |
+| BCReadPlugin cold.1                      | Borderline null-check, not escalated                   |

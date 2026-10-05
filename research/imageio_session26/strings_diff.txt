@@ -1,0 +1,57 @@
+## ImageIO strings diff (keyword-filtered)
+### NEW in beta
+11OutOfBounds
+@14HEIFReadPlugin
+*** bad 'fcTL' chunk size at offset %ld: %u - expected frames: %ld  found: %ld
+*** bad KTX: [%ldx%ld]  srcBpp: %lld  fileSize: %d
+*** bad packed KTX: [%ldx%ld] fileSize: %d
+*** DDS/ASTC: image dimensions overflow
+*** ERROR: TIFFSetDirectory failed
+*** ERRROR: could not allocate rlebuf - size=%llu
+_IIO_CreateImageCopyWithColorSyncISO5Metadata
+/Library/Caches/com.apple.xbs/6CB89A49-A15D-4160-AD94-42BE72C00A75/TemporaryDirectory.Wj8l3B/Sources/ImageIO/FileFormats/libTIFF/tif_dir.c
+loadTIFFStructure
+TIFFReadDirEntryFloatArray
+TIFFReadDirEntryIfd8Array
+TIFFReadDirEntryLong8ArrayWithLimit
+TIFFReadDirEntryLongArray
+TIFFReadDirEntryShortArray
+TIFFReadDirEntrySlong8Array
+TIFFReadDirEntrySlongArray
+TIFFReadDirEntrySshortArray
+XMP_Enforce failed: (amountRead == count) in /Library/Caches/com.apple.xbs/6CB89A49-A15D-4160-AD94-42BE72C00A75/TemporaryDirectory.Wj8l3B/Sources/ImageIO/XMP-Toolkit-SDK/source/XMPFiles_IO.cpp at line 158
+XMP_Enforce failed: (itemIndex <= arraySize) in /Library/Caches/com.apple.xbs/6CB89A49-A15D-4160-AD94-42BE72C00A75/TemporaryDirectory.Wj8l3B/Sources/ImageIO/XMP-Toolkit-SDK/XMPCore/source/XMPMeta2-GetSet.cpp at line 882
+XMP_Enforce failed: (itemIndex < arraySize) in /Library/Caches/com.apple.xbs/6CB89A49-A15D-4160-AD94-42BE72C00A75/TemporaryDirectory.Wj8l3B/Sources/ImageIO/XMP-Toolkit-SDK/XMPCore/source/XMPMeta-GetSet.cpp at line 1068
+XMP_Enforce failed: (length <= this->currLength) in /Library/Caches/com.apple.xbs/6CB89A49-A15D-4160-AD94-42BE72C00A75/TemporaryDirectory.Wj8l3B/Sources/ImageIO/XMP-Toolkit-SDK/source/XMPFiles_IO.cpp at line 268
+XMP_Enforce failed: (memcmp( buffer, "\x47\x49\x46\x38\x39\x61", 6 ) == 0) in /Library/Caches/com.apple.xbs/6CB89A49-A15D-4160-AD94-42BE72C00A75/TemporaryDirectory.Wj8l3B/Sources/ImageIO/XMP-Toolkit-SDK/XMPFiles/source/FileHandlers/GIF_Handler.cpp at line 158
+__Z22CreateReader_RawCameraP13IIODictionary
+__ZL19DDSDXGIFormatIsASTCj
+__ZL29HEIFCopyColorSyncISO5MetadataP7CGImage
+__ZN11OutOfBoundsD0Ev
+__ZN11OutOfBoundsD1Ev
+__ZN13HEIFMainImage23getMaxContentLightLevelEv
+__ZN13HEIFMainImage28hasISO5ContentLightLevelInfoEv
+__ZN13HEIFMainImage34getISO5MasteringDisplayColorVolumeEv
+__ZN13HEIFMainImage34hasISO5MasteringDisplayColorVolumeEv
+__ZN14ASTCTextureImp24MetalFormatForDXGIFormatEj
+__ZN7GPSCopy22checkInitializedLengthEPhm
+__ZN7GPSCopy22checkInitializedLengthEPhm.cold.1
+__ZTI11OutOfBounds
+__ZTS11OutOfBounds
+__ZTV11OutOfBounds
+__ZZN14ASTCTextureImp24MetalFormatForDXGIFormatEjE3hdr
+__ZZN14ASTCTextureImp24MetalFormatForDXGIFormatEjE3ldr
+__ZZN14ASTCTextureImp24MetalFormatForDXGIFormatEjE4srgb
+
+### REMOVED (stable only)
+14HEIFReadPlugin
+*** bad KTX: [%ldx%ld]  channels: %ld  fileSize: %d
+*** ERRROR: could not allocate rlebuf - size=%d
+/Library/Caches/com.apple.xbs/9EA2C41C-595B-4937-9656-B7AAE2B63C97/TemporaryDirectory.VOKjjy/Sources/ImageIO/FileFormats/libTIFF/tif_dir.c
+_sniffOlympusRaw
+XMP_Enforce failed: (amountRead == count) in /Library/Caches/com.apple.xbs/9EA2C41C-595B-4937-9656-B7AAE2B63C97/TemporaryDirectory.VOKjjy/Sources/ImageIO/XMP-Toolkit-SDK/source/XMPFiles_IO.cpp at line 158
+XMP_Enforce failed: (itemIndex <= arraySize) in /Library/Caches/com.apple.xbs/9EA2C41C-595B-4937-9656-B7AAE2B63C97/TemporaryDirectory.VOKjjy/Sources/ImageIO/XMP-Toolkit-SDK/XMPCore/source/XMPMeta2-GetSet.cpp at line 882
+XMP_Enforce failed: (itemIndex < arraySize) in /Library/Caches/com.apple.xbs/9EA2C41C-595B-4937-9656-B7AAE2B63C97/TemporaryDirectory.VOKjjy/Sources/ImageIO/XMP-Toolkit-SDK/XMPCore/source/XMPMeta-GetSet.cpp at line 1068
+XMP_Enforce failed: (length <= this->currLength) in /Library/Caches/com.apple.xbs/9EA2C41C-595B-4937-9656-B7AAE2B63C97/TemporaryDirectory.VOKjjy/Sources/ImageIO/XMP-Toolkit-SDK/source/XMPFiles_IO.cpp at line 268
+XMP_Enforce failed: (memcmp( buffer, "\x47\x49\x46\x38\x39\x61", 6 ) == 0) in /Library/Caches/com.apple.xbs/9EA2C41C-595B-4937-9656-B7AAE2B63C97/TemporaryDirectory.VOKjjy/Sources/ImageIO/XMP-Toolkit-SDK/XMPFiles/source/FileHandlers/GIF_Handler.cpp at line 158
+__ZN19IIOReader_RawCameraC1EP13IIODictionary

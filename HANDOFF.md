@@ -679,3 +679,429 @@ Both dispatch tables decoded and every handler decompiled; paired **by body, not
 
 
 
+
+### Session 24 (2026-10-05): WidgetKit/SpringBoard attack surface — SBIconStateArchiver CLOSED, negative finding
+
+**CLOSED — negative finding.** 4 new methods in `SBIconStateArchiver` (beta only:
+`modernizedRootArchiveFromITunesRepresentation:`, `_rootArchiveByAssigningMissingFolderIdentifiers:`,
+`_iconListByAssigningMissingFolderIdentifiers:identifierPrefix:` + its `_block_invoke`) are a
+**robustness fix** for the iTunes-sync icon-layout import path: when
+`kSBIconStateUniqueIdentifier` is missing, duplicated, or non-string, beta synthesizes a new ID
+(`synthesizedFolderIdentifier.<prefix>.<idx>`). The new code is itself written defensively
+(`isKindOfClass:` checked at every level — on the array element before `objectForKey:`, and on the
+pre-existing identifier before trusting its type). **No type confusion. No exploitation potential
+found.** Full decompile trail below; see also the WidgetKit/SpringBoard section of `WRITEUP.md`.
+
+Started as a new attack-surface sweep (WidgetKit + SpringBoard, XPC/NSItemProvider/NSKeyedUnarchiver
+surface), separate from AMFI/SEP/IOAV work. Pipeline: extracted both frameworks from the *full*
+dyld_shared_cache (not standalone files — see Methodology below), selector-diffed, then manually
+decoded the one relevant hit.
+
+#### Extraction / environment notes (new, reusable)
+- `WidgetKit.framework` and `SpringBoard.framework` live in the **dyld_shared_cache**, not as
+  loose files in the rootfs DMG. Extraction path used:
+  ```
+  ipsw extract --dyld --dyld-arch arm64e -o <outdir> <ipsw>      # full split cache (~several GB)
+  ipsw dyld extract <DSC> "/System/Library/Frameworks/WidgetKit.framework/WidgetKit" -o <outdir> --objc --force
+  ipsw dyld extract <DSC> "/System/Library/PrivateFrameworks/SpringBoard.framework/SpringBoard" -o <outdir> --objc --force
+  ```
+  `--objc` is required to get `-[Class method]` symbols into the symtab (readable via `llvm-nm`).
+  `SpringBoard.app`'s own Mach-O is **not** in the cache (thin launcher); all logic lives in
+  `SpringBoard.framework`.
+- `/tmp` is tmpfs (7.8G) — AEA-decrypt of the DMG during `--dyld` extraction fills it and fails
+  ("no space left on device"). Fix: `export TMPDIR="/run/media/ivan/New Volume/ipsw_tmp"` before
+  calling `ipsw extract`.
+- **`__objc_methname`/`__objc_methtype` are size-0x0 in every per-image file extracted from a
+  modern (iOS 15+) dyld_shared_cache** — selector strings are uniqued into a cache-wide pool, not
+  duplicated per image. Confirmed via `llvm-otool -l` and `rabin2 -S` (`size 0x0` at both).
+  **Consequence: `strings`/`otool` on a standalone-extracted dylib can never show bare selector
+  literals** (`decodeObjectForKey:`, `setRequiresSecureCoding:`, etc.) — this is a structural
+  limitation, not an absence-of-finding. Don't waste time re-trying string/otool scans on these
+  files for selector names.
+- Same root cause broke **r2** (`aaa` → `ERROR: Invalid class name for method. Avoid parsing
+  invalid data`, repeated) and partially breaks **Ghidra** on the standalone file: `-[Class
+  method]` symbols from the `--objc`-synthesized symtab are usable (function definitions
+  resolve fine — got 65425/65441 funcs, ~525s each via PyGhidra `analyze=True`), but
+  `objc_msgSend` **call-site** selector resolution does not, because the selref the call reads
+  points at the same zero-backed region.
+- **Working alternative for selector/string-resolved disassembly: `ipsw dyld disass <DSC>
+  --symbol-image "<path>" -s "<symbol>"`** run against the **full, un-extracted** DSC file. This
+  has the whole cache mapped, so selector/string literals and even ARC-runtime stub names
+  (`_objc_retain_x19_stub`, `_objc_claimAutoreleasedReturnValue_stub`, etc.) resolve correctly.
+  This became the primary tool for this session, replacing both r2 and Ghidra-on-standalone-dylib
+  for anything selector-related. Plain `bl <addr>` targets that don't auto-resolve (regular
+  per-selector specialized stubs, pattern `adrp x1,…; add x1,x1,#off ; b _objc_msgSend`) can be
+  decoded manually with `ipsw dyld disass <DSC> -a <addr> -c 4` — the `add` instruction's comment
+  gives the literal selector name.
+- Ghidra project paths (new): `ghidra_proj/sb_stable`, `ghidra_proj/sb_beta` (SpringBoard.framework
+  only; analyze=True, ~525s each, 65k+ funcs). Scripts: `ghidra_proj/import_sb.py`,
+  `ghidra_proj/sb_find_string_xrefs.py` (latter confirmed useless for raw selector literals, per
+  above — only finds the synthetic `-[Class method]` label strings in Swift reflection metadata,
+  not real `__objc_methname` call-site data).
+
+#### Selector diff results
+- **WidgetKit.framework: 0 selector diff** (139 selectors, byte-identical set stable vs beta).
+  Deprioritized per user's own correction mid-session.
+- **SpringBoard.framework: 33 added / 35 removed** (net 54138→54136) out of ~54k total selectors.
+  Full lists: `/tmp/widgets_out/SpringBoard_{added,removed}.txt` (also copied reasoning below).
+  Correcting an earlier false lead from the session: there is **no isolated "+1 selector"** — that
+  framing (from an outside "analyst") didn't match the actual diff and was dropped once challenged.
+- Only genuinely on-topic hit after filtering by widget/layout/archiver keywords: **4 new
+  `SBIconStateArchiver` class methods.** Nothing else in the 33 added / 35 removed lists matched
+  (rest is SBAppResizingSession/SBFDIDeviceControl/SBSAPlatformMetrics/CarPlay/DeviceEmulation
+  churn — unrelated refactors).
+
+#### SBIconStateArchiver — full finding
+New in beta (all 4 are **additions**, not modifications — `modernizeRootArchive:` and
+`rootArchiveFromITunesRepresentation:` already existed, unchanged, in stable):
+```
++[SBIconStateArchiver modernizedRootArchiveFromITunesRepresentation:]      // NEW wrapper
++[SBIconStateArchiver _rootArchiveByAssigningMissingFolderIdentifiers:]    // NEW
++[SBIconStateArchiver _iconListByAssigningMissingFolderIdentifiers:identifierPrefix:]   // NEW (singular, for Dock keys)
++[SBIconStateArchiver _iconListsByAssigningMissingFolderIdentifiers:identifierPrefix:]  // NEW (plural, for icon-lists / recursion)
+```
+Call chain (beta only):
+```
+modernizedRootArchiveFromITunesRepresentation:(input)
+  = _rootArchiveByAssigningMissingFolderIdentifiers:(
+        modernizeRootArchive:(
+            rootArchiveFromITunesRepresentation:(input)))
+```
+`_rootArchiveByAssigningMissingFolderIdentifiers:` mutably copies the root dict; for keys
+`kSBIconStateDock`, `kSBIconStateDockUtilities`, `kSBIconStateIconLists` it checks
+`isKindOfClass:[NSArray class]` before touching the value — non-array values pass through
+untouched (no crash path there).
+
+Per-element block (`_iconListByAssigningMissingFolderIdentifiers:identifierPrefix:_block_invoke`,
+full asm in `/tmp/widgets_decomp/SBIconStateArchiver_beta_iconList_block_invoke.asm`) — this is
+the piece directly answering the "type confusion via array element" hypothesis:
+```c
+for (id element in iconList) {
+    id sub = [element isKindOfClass:[NSDictionary class]]
+             ? [element objectForKey:kSBIconStateIconLists] : nil;
+    if ([sub isKindOfClass:[NSArray class]]) {           // element is a folder w/ nested list
+        id existingID = [element objectForKey:kSBIconStateUniqueIdentifier];
+        if (![existingID isKindOfClass:[NSString class]])  // missing OR wrong-typed ID
+            mutableCopy[kSBIconStateUniqueIdentifier] =
+                [NSString stringWithFormat:@"synthesizedFolderIdentifier.%@", prefix.idx];
+        mutableCopy[kSBIconStateIconLists] = recurse(sub, newPrefix);  // plural variant, recursion
+        result = [mutableCopy copy];
+    } else {
+        result = element;   // NOT a folder-dict → passed through unchanged, no cast
+    }
+    [accumulator addObject:result];
+}
+```
+
+#### Verdict
+- **Type-confusion-via-array-element hypothesis (task item 7 in this session) is NOT confirmed.**
+  The new code is itself written defensively: `isKindOfClass:` is checked both on the element
+  (before `objectForKey:`) and on the existing identifier (before treating it as a string) —
+  mismatched-type elements pass through unmodified rather than being coerced or crashing.
+- **What the patch actually looks like: a robustness/consistency fix**, not a memory-safety fix.
+  In **stable (27.0.1)**, the iTunes-representation icon-layout import path
+  (`rootArchiveFromITunesRepresentation:` → `modernizeRootArchive:`) has **no step that assigns or
+  validates `kSBIconStateUniqueIdentifier`** on folder entries. A layout blob (e.g. from an
+  iTunes/Finder sync restore) with folders that are missing this key, or have a duplicate/wrong-typed
+  value for it, flows through unchanged into whatever consumes the modernized archive
+  (`SBIconModel`/`SBHomeScreenController` — **not yet traced**, see Gaps). Beta closes that gap by
+  synthesizing a unique ID (`synthesizedFolderIdentifier.<prefix>.<idx>`) wherever one is missing
+  or mistyped, recursively, before the archive is used.
+- Most likely downstream impact of the stable-side gap: state-consistency bug (duplicate dict key /
+  nil-key use somewhere in icon-state bookkeeping) → crash or UI corruption on import of a
+  malformed/legacy icon layout, not an RCE-class primitive. Not escalated further this session.
+
+#### Gaps / not resolved
+- Did not trace the actual **external caller** of `rootArchiveFromITunesRepresentation:` /
+  `modernizedRootArchiveFromITunesRepresentation:` (i.e. who feeds an iTunes-sync-style icon-layout
+  blob into this path, and under what trust boundary — Finder/iTunes restore, iCloud sync, a local
+  file). Blocked by the same selref-resolution gap described above: specialized per-selector stubs
+  are shared per-image, so a classic "xref to function address" search doesn't find callers of a
+  *selector* the way it would for a plain C function — would need either a full in-place DSC import
+  into Ghidra (not attempted, likely very heavy) or scripted stub-literal scanning across all of
+  `__TEXT_STUBS` to find every call site that loads this one selector's string address.
+- Did not trace **`SBIconModel`/`SBHomeScreenController`** consumption of
+  `kSBIconStateUniqueIdentifier` to confirm the actual failure mode when it's missing/duplicate in
+  stable (next natural step, offered to user, not yet picked up).
+- Task item 8 from this session's brief (r2 scan: `decodeObjectForKey:` present /
+  `setRequiresSecureCoding:` absent nearby, across all of SpringBoard) was **not completed and is
+  not salvageable with r2/otool on the standalone binary** — see Extraction notes above. Would need
+  re-doing entirely via `ipsw dyld disass` stub-literal scanning (not attempted — large search
+  space, no targeted candidate yet to justify the cost).
+- WidgetKit.framework itself got no further look after the 0-selector-diff result (deprioritized by
+  user).
+
+#### Artifacts
+- `/tmp/widgets_out/`: `{WidgetKit,SpringBoard}_{stable,beta}_strings.txt` (keyword-filtered),
+  `{WidgetKit,SpringBoard}_{stable,beta}_selectors.txt` (normalized, sorted), `SpringBoard_{added,
+  removed}.txt`, `SpringBoard_{stable,beta}_allstrings.txt`, `SpringBoard_strings_{added,removed}.txt`,
+  `strings_diff_secure_coding.txt` (near-empty, see Extraction notes for why), `import_sb_{stable,
+  beta}.log` (Ghidra analysis logs).
+- `/tmp/widgets_decomp/`: `SBIconStateArchiver_beta_{rootArchiveFixup,iconListFixup,iconListsFixup,
+  iconList_block_invoke}.asm` — full annotated disassembly of all 4 new methods + the per-element
+  block, obtained via `ipsw dyld disass` against the live beta DSC.
+- `~/projects/iphone-lockdownd-fuzzer/bigdata/extracted/{stable,beta}/{dyld/,bins/}` — full arm64e
+  dyld_shared_cache per variant (large, gitignored) + extracted WidgetKit/SpringBoard standalone
+  Mach-O (usable for nm/symbol-definition lookups, **not** for selector-call xrefs — see above).
+- `~/projects/iphone-lockdownd-fuzzer/ghidra_proj/{import_sb.py,sb_find_string_xrefs.py}`,
+  projects `sb_stable`/`sb_beta`.
+
+## Методология — грабли (dyld_shared_cache / ObjC-селекторы)
+
+Применимо к любому будущему анализу userland-бинарников, вытащенных из dyld_shared_cache
+(SpringBoard, WidgetKit, да и вообще любой `/System/Library/...Framework` на iOS 15+):
+
+1. **`strings`/`otool` diff по `__objc_methname` на вырезанных из DSC бинарниках НЕ РАБОТАЕТ.**
+   Начиная с iOS 15+ селекторные строки unique'ятся в общий across-images пул самого
+   dyld_shared_cache. В файле, извлечённом поштучно (`ipsw dyld extract <DSC> <image>`),
+   `__TEXT.__objc_methname` имеет `size=0x0` (подтверждено `llvm-otool -l` и `rabin2 -S` на
+   WidgetKit и SpringBoard, оба build'а). Голые имена селекторов (`decodeObjectForKey:`,
+   `setRequiresSecureCoding:` и т.п.) физически отсутствуют в файле — их не найдёт никакой
+   strings-based скан, сколько угодно ключевых слов ни подбирай. Это структурное ограничение,
+   а не признак отсутствия находки.
+
+2. **r2 (radare2) на таких вырезанных dylib'ах ломается на ObjC-анализе.** `aaa` выдаёт поток
+   `ERROR: Invalid class name for method. Avoid parsing invalid data` и `WARN: not parsing ivars,
+   wrong va2pa` — та же причина: `__objc_methlist` ссылается на адреса вне файла (в shared pool),
+   r2 пытается их разыменовать и получает мусор.
+
+3. **Ghidra работает частично.** Если бинарник извлечён с `ipsw dyld extract --objc`, в symtab
+   появляются синтезированные `-[Class method]`/`+[Class method]` записи для **определений**
+   методов — это надёжно (via `nlist`, не зависит от methlist). Но **xref на call site** для
+   `objc_msgSend`-вызовов внешних (Foundation/UIKit) селекторов не резолвится — селектор-референс
+   читает тот же пустой `__objc_methname`. Поиск строки через `DefinedData`-скан в Ghidra тоже не
+   находит голые селекторы — только случайные совпадения в Swift-reflection-метаданных (не code
+   xrefs).
+
+4. **Рабочий воркэраунд: `ipsw dyld disass <полный DSC> --symbol-image "<path>" -s "<symbol>"`.**
+   Работает против **целого, не вырезанного** файла dyld_shared_cache — там shared selector pool
+   физически на месте, поэтому резолвятся и имена селекторов, и ARC-рантайм стабы
+   (`_objc_retain_x19_stub`, `_objc_claimAutoreleasedReturnValue_stub` и т.п.), и строковые
+   константы. Для специализированных per-selector стабов (паттерн `adrp x1,…; add x1,x1,#off ; b
+   _objc_msgSend`), на которые `ipsw` не даёт автоматическое имя при встрече через `bl <addr>`
+   внутри более крупной функции — декодируется вручную: `ipsw dyld disass <DSC> -a <addr> -c 4`,
+   комментарий у `add` даёт буквальное имя селектора. Альтернатива — загрузка **целого** DSC в
+   Ghidra (не пробовали в Session 24: тяжело по времени/памяти для framework такого размера,
+   кэш — многогигабайтный multi-file split cache).
+
+### Session 24 (addendum): remaining 29 SpringBoard added-selectors — zero security candidates
+
+Applied GLM's P1/P2/P3/DISCARD keyword rubric (`NSXPCConnection|NSXPCInterface|allowedClasses|
+remoteObjectProxy|ForExtender|Server|Endpoint|assertion|ForSecurity|XPC` for P1,
+`audit_token|xpc_connection|SecTask|isEntitled|entitlement|verifySender|validateCallingPath|
+allowedCaller` for P2) to the 29 added selectors not already covered by `SBIconStateArchiver`.
+Batch-disassembled all 29 against the **full beta DSC** (`ipsw dyld disass … --symbol-image … -s
+"<selector>"`, saved to `/tmp/widgets_decomp/scan29/*.asm`) and grepped each body.
+
+**Result: 0 genuine P1/P2 hits out of 29.** One incidental string match
+(`SBSAppResizingAssertionStorage` in `-[SBAppResizingSession
+initWithWindowSceneManager:displayUniqueId:monitoredWindowScene:resizingCornerRadius:]`) is a
+process-lifetime/jetsam assertion (à la `ProcessAssertion`), unrelated to caller-identity
+validation — ruled out by inspection.
+
+Manually decompiled the one name-plausible candidate that produced no string hit (guards can be
+pure integer/ivar comparisons with no literal): `-[SBApplicationSceneUpdateTransaction
+_shouldRequirePreflightForRequest:]`. Its guard reads **internal ivars** (`_sceneParameters`-derived
+flag) and delegates to `_preflightController` with `_applicationIdentity` (both internal object
+state, not an XPC/audit-token boundary value) — per GLM's diff-height check ("guard checks
+internal data flow → feature, not security"), this is a feature dispatcher, not a silent patch.
+DISCARDed.
+
+Spot-checked the smallest bodies (`isUninstallRequestFulfilled`, `setUninstallRequestFulfilled:`,
+`iconManager:failedToOpenFolder:`, `_shouldShowAlertForSeed`) — all are 2-instruction ivar
+get/set, no logic at all.
+
+**Conclusion: SpringBoard added-selectors (all 33, including the 4 `SBIconStateArchiver` ones
+already closed separately) — zero security candidates found.** The remaining 29 are UI/lifecycle/
+multitasking churn: CarPlay notification handling, AppResizing/Stage-Manager-adjacent APIs,
+folder-open UI callbacks, biometric-alert UI, telephony info display. None reference an
+XPC/audit-token/entitlement/caller-identity boundary in their body.
+
+This closes the SpringBoard added-selector line of inquiry for this session. WidgetKit.framework
+(0 selector diff) was already deprioritized earlier. Next attack-surface candidates, if this
+thread is picked back up, would need a different entry point than selector-diffing (e.g. the
+deferred `SBIconModel`/`SBHomeScreenController` downstream trace from the SBIconStateArchiver
+finding, or a fresh class/method set not touched by this diff at all).
+
+### Session 25: Track B — SBIconStateArchiver downstream trace — CLOSED (confirms state-confusion hypothesis, no new attack surface)
+
+Traced where the modernized root archive (output of `SBIconStateArchiver`, Session 24) actually
+gets consumed, to answer: does anything downstream validate `kSBIconStateUniqueIdentifier`
+independently?
+
+- `-[SBIconModel importState:]` (unchanged selector, present in both builds): branches on
+  input type (`NSArray` → re-wraps via `+[SBIconStateArchiver ...]` stub@`0x2280e8fb0`
+  — distinct from, but adjacent to, `modernizeRootArchive:`'s stub@`0x2280e8fa0`; `NSDictionary`
+  → used as-is), then builds an `SBHIconStateBuilder` object from it and logs
+  `"%@: icon state imported: %@"`. **No reference to `kSBIconStateUniqueIdentifier` in this
+  function at all** — it delegates entirely.
+- `SBHIconStateBuilder` is **not defined in SpringBoard.framework** — it's an external class
+  (`_OBJC_CLASS_$_SBHIconStateBuilder` is `U`/undefined in SpringBoard's own symtab), implemented
+  in **`SpringBoardHome.framework`**. Confirmed via `llvm-nm` on both frameworks across variants.
+- Diffed `SpringBoardHome.framework`'s full selector set (18048 stable / 18083 beta) — **zero
+  diff touching `SBHIconStateBuilder` or anything with "UniqueIdentifier" in the name.** The class
+  is byte-identical between builds (not investigated beyond this targeted check — a full
+  SpringBoardHome sweep was out of scope for this 30-40min budget).
+- Decompiled `+[SBHIconStateBuilder iconStateFolderWithName:iconLists:]` (one of its 4 factory
+  methods) as a representative sample: it is **unconditional dict-literal construction**
+  (`{listType:"folder", displayName:name, iconLists:lists}`) — no branch, no nil check, no
+  identifier handling of any kind.
+
+#### Verdict
+**Confirms, does not add to, the Session 24 finding.** There is no second layer of validation
+anywhere downstream of `SBIconStateArchiver`. `SBIconModel.importState:` and
+`SBHIconStateBuilder` both trust their input completely, in both stable and beta — identifier
+correctness is **entirely** the archiver's responsibility, which is exactly why Apple patched it
+there. In **stable (27.0.1)**, a malformed `kSBIconStateUniqueIdentifier` (missing/duplicate/wrong
+type) in an iTunes-sync icon-layout blob flows unguarded all the way into live icon-model
+construction via this same unchanged `importState:`/`SBHIconStateBuilder` path. Still assessed as
+a **state-confusion/crash risk on import, not a memory-safety bug** — nothing in the consumer path
+does anything with the identifier beyond using it as a dictionary key/display value.
+
+**Track B closed.** Not escalated further (no PoC, per task scope).
+
+Artifacts: `/tmp/widgets_decomp/SBIconModel_beta_importState.asm`,
+`/tmp/widgets_decomp/SBIconModel_downstream.asm`, `/tmp/widgets_out/SpringBoardHome_{stable,beta}_selectors.txt`.
+
+### Session 25 (cont.): Track C — ImageIO.framework — GPSCopy OOB-read CONFIRMED, two more leads open
+
+New attack surface (per user direction: "19 CVE in 2026 — самая горячая цель"). Extracted
+`ImageIO.framework` from both full DSCs the same way as Session 24 (`ipsw dyld extract ... --objc
+--force`, then all disassembly against the **full, un-extracted** DSC via `ipsw dyld disass`).
+ImageIO is mostly non-ObjC: 14036 (stable) / 14080 (beta) plain C/C++ symbols (plus tens of
+thousands of Swift-mangled property-model symbols for a metadata layer, not inspected). Full
+symbol diff + keyword-filtered string diff in `/tmp/imageio_out/`.
+
+#### CONFIRMED: GPSCopy (EXIF/TIFF GPS-IFD parser) — out-of-bounds read, silently patched
+
+New in beta: `GPSCopy::checkCapacity(uint8_t*,size_t)`, `GPSCopy::checkInitializedLength(uint8_t*,
+size_t)`, `GPSCopy::pointerToOffset(size_t)`, `GPSCopy::read32Unchecked(uint8_t*)` (renamed from
+stable's `GPSCopy::read32`, **body byte-for-byte identical** — confirmed by full instruction
+diff), plus a brand-new C++ exception type `class OutOfBounds` (real vtable + typeinfo symbols:
+`_ZTV11OutOfBounds`, `_ZTI11OutOfBounds`, `_ZTS11OutOfBounds`, non-inline destructors).
+
+`checkCapacity`/`checkInitializedLength` both compute `(this->base + this->{capacity|
+initializedLength}) - ptr` and throw `OutOfBounds` if negative or smaller than the requested read
+size — i.e. two independent bounds checks (against total buffer capacity AND against how much of
+it is actually populated from the input file), not a type/nil check.
+
+**Smoking gun: `GPSCopy::processData()` call-count diff.** Stable's version (265 disasm lines)
+calls the raw `read32()` **3 times with zero bounds-check calls anywhere in the function**.
+Beta's version (486 lines, same overall shape, same `adjustIFDOffsets(IFDData*,int,int)` call
+present unchanged) has **42 calls** to `checkCapacity`/`checkInitializedLength`/
+`pointerToOffset`/`read32Unchecked` combined — a bounds check inserted before essentially every
+pointer dereference in the IFD-walking loop. Textbook GLM pattern (guard validates file-derived
+offset/length input; downstream read primitive unchanged; one-shot test: stable reads OOB memory
+on a malformed offset, beta throws cleanly).
+
+**Severity: OOB read confirmed by static evidence. OOB write not ruled out** — class name
+"GPSCopy" implies it copies GPS metadata into an output file/buffer (`writeOutputFile` present),
+and the same buffer-struct fields gate both read checks; whether the write side uses the same
+translation and was equally unguarded in stable was **not traced this session** (would need
+`readInputFile`/`writeOutputFile` disassembly). Caller of `copyFileWithGPSInformation()` (i.e.
+what OS-level flow actually reaches this with attacker data — likely a Photos.app "remove
+location"/metadata-strip path, not confirmed) also **not traced**.
+
+Not escalated to PoC per task scope (reconnaissance only).
+
+#### Two more leads, flagged but not traced to a containing function (time-boxed out this session)
+
+- **`"*** DDS/ASTC: image dimensions overflow"`** — new explicit overflow-guard string in beta,
+  alongside new `CreateReader_DDS_ASTC()` factory + `DDSDXGIFormatIsASTC()` helper. The factory
+  itself (46 lines, inspected) doesn't reference the string — the actual check lives in some
+  other, not-yet-located decode function. `ipsw`'s CLI has no generic "find xrefs to this data
+  address" command (its disasm/a2f tools work from a function symbol or code address, not a
+  string literal's address) — locating it would need either a scripted scan of all DDS/BC-related
+  functions or a full in-cache xref pass.
+- **rlebuf allocation error format `"size=%d"` (stable) → `"size=%llu"` (beta)** — the size
+  variable driving an RLE-decompression buffer allocation was widened from 32-bit to 64-bit
+  unsigned, the classic signature of an integer-overflow-in-size-calculation fix (narrow
+  accumulator wraps on large dimensions → undersized malloc → OOB write during decompression).
+  Same blocker as above: containing function not located this session.
+
+#### Discarded as feature, not security (per GLM anti-patterns)
+
+ISO5/HDR gain-map metadata support (`IIO_*ISO5*`, `HEIFMainImage::*ContentLightLevel*`/
+`*MasteringDisplayColorVolume*`, `CGColorSpaceCreateWithCopyOfDataAndMetadata`) — new capability,
+not a guard. `BCReadPlugin` new pixel-format decoders (`decode1010102toRGBA16`,
+`decodePacked16toRGBA16`, `decodeUncompressedToRGBA`) — new format support. `ASTCTextureImp`/DDS
+texture-format plumbing — feature. `sniffBC`→`sniffDDS` rename — cosmetic. `IIOReader_RawCamera`
+constructor → `CreateReader_RawCamera()` factory — refactor pattern (not inspected further).
+`IIOPixelConverterRGB` ctor gained 2 new bool params — purpose not inspected, not elevated without
+evidence. TIFF `TIFFReadDirEntry*ArrayWithLimit` family + `loadTIFFStructure` — strong
+"WithLimit"-suffix bounds-hardening naming signature, **not inspected this session** (flagged P3,
+good next candidate — same shape as GPSCopy, TIFF directory-entry-array overflows are a classic
+libtiff CVE class).
+
+#### Noted for a follow-up pass, same "new .cold.N path on an existing function" shape as GPSCopy
+
+`EXRReadPlugin::decodeBlockAppleEXR(...).cold.6` (OpenEXR has real CVE history) and
+`BCReadPlugin::decodeDXTCtoRGBX(...).cold.1` — both are pre-existing functions that gained a new
+compiler-generated cold/error path in beta, same signature as GPSCopy's fix. Not pursued this
+session; recommended as next-in-line if this track continues, ahead of the already-discarded
+BCReadPlugin feature additions.
+
+Artifacts: `/tmp/imageio_out/` (`stable_cfuncs.txt`, `beta_cfuncs.txt`, `strings_diff.txt`,
+`GPSCopy_*.asm`, `DDS_ASTC_beta.asm`, `imageio_shortlist.txt` — full shortlist writeup).
+
+### Session 26: GPSCopy deep-dive — OOB-WRITE confirmed (upgraded from OOB-read), reachability found, 2 leads ruled out/left open
+
+Full write-up: `/tmp/imageio_out/gpscopy_analysis.txt`. Headline change from Session 25: this is
+now assessed as an **out-of-bounds WRITE**, not just a read — severity class moves from info-leak
+toward memory-corruption/potential-RCE-primitive.
+
+**Write-path (confirmed):** `GPSCopy::processData()` has 4 `memmove` call sites writing into the
+GPS-info output buffer. In **stable**, all 4 compute their copy length via raw pointer-subtraction
+arithmetic from GPS-IFD offset/count fields with **zero bounds-check calls anywhere in the
+function**. In **beta**, every one of the same 4 sites is immediately preceded by a
+`checkCapacity(ptr, len)` call using the *exact same* length value passed to the following
+`memmove` (verified register-by-register at all 4 sites). The raw read primitive
+(`read32`/`read32Unchecked`) remains byte-for-byte identical between builds — confirms the fix is
+purely "add 42 guard calls around existing read/write sites," not a rewrite.
+
+**Reachability (partially traced):** found the public exported entry point —
+`Boolean CGImageCopyFileWithGPSInformation(CFStringRef src, CFStringRef dst, CFDictionaryRef
+properties)` — a **file-path-based** API (not CGImageSource/buffer-based). Confirmed via
+`TIFF_FileWriter::HasGPSInfoIFD`/`TIFF_MemoryReader::HasGPSInfoIFD` that it operates on an
+**already-existing GPS IFD in the source file** (covers JPEG EXIF, since JPEG's EXIF block is the
+same TIFF IFD format). **Not confirmed:** which OS-level flow actually calls this (candidate
+guesses only — Photos.app "Remove Location," capture-time GPS embed, Mail/Messages attachment
+prep — none verified). Based on the file-path signature, this is very likely a **separate utility
+function, not part of the generic CGImageSource decode path** that thumbnail/preview generators
+(iMessage previews, WebKit, Quick Look) use by default — this narrows the "trivial drive-by"
+framing considerably; reachability is the single biggest open question if this is escalated
+further.
+
+**Trigger:** described structurally only (an internally-inconsistent GPS-IFD offset/count that
+makes one of the 4 pointer-subtraction length computations underflow or exceed true buffer
+capacity) — no payload built, no execution attempted, per task scope (recon only).
+
+**Two quick leads — both inconclusive:**
+- `"*** DDS/ASTC: image dimensions overflow"` (confirmed new-in-beta string): **containing
+  function not located.** Ruled out a decoy: `ASTCTextureImp::decodeRGBXFromLinear`'s own overflow
+  guard (`"Integer overflow in buffer size calculation (blockDim: %ux%u)"`) is **present in BOTH
+  builds** (verified by direct string search) — not part of this patch, don't mistake it for the
+  lead if revisited. `ipsw`'s CLI has no xref-to-string-literal search; would need a scripted scan
+  or full in-Ghidra DSC import to localize the real one.
+- rlebuf allocation `"size=%d"`→`"size=%llu"`: containing function **not located** either.
+  Circumstantially consistent with an integer-overflow-class fix (same shape as the ruled-out ASTC
+  decoy above) but **not confirmed** — flagged as a lead only.
+
+**Two cold-paths checked, both low-priority:**
+- `EXRReadPlugin::decodeBlockAppleEXR(...).cold.6` → `"*** axr_decoder_create failed\n"` —
+  **DISCARD**, a resource/allocation-failure log, not a new bounds guard.
+- `BCReadPlugin::decodeDXTCtoRGBX(...).cold.1` → `"*** BC - no compressed data for level %d\n"` —
+  borderline null/missing-resource check, not the audit/offset/length class of guard; not
+  escalated.
+
+Artifacts: `/tmp/imageio_out/gpscopy_analysis.txt`, `GPSCopy_{stable,beta}_processData.asm`,
+`CGImageCopyFileWithGPSInformation_beta.asm`, `EXR_cold6.asm`, `BC_cold1.asm`,
+`IIO_Reader_ASTC_getImageCount_beta.asm`, `__ZN14ASTCTextureImp20decodeRGBXFromLinear...asm`.
+
+**Not escalated to PoC, per task scope.**
+
+---
+**STOPPED HERE (2026-10-06) — resume next session:**
+- GPSCopy (ImageIO, EXIF/TIFF GPS-IFD) OOB-write is the flagship finding so far, confirmed via static diff. Next: trace reachability (who calls `CGImageCopyFileWithGPSInformation` — Photos.app/Messages/Mail import scan, none done yet) before deciding whether this is worth escalating further.
+- Two open ImageIO leads need a containing function: `"DDS/ASTC: image dimensions overflow"` string, and rlebuf `%d`→`%llu` allocation-size widening. Both need either a scripted scan or full in-Ghidra DSC import (ipsw CLI has no xref-to-string-literal search).
+- TIFF `TIFFReadDirEntry*ArrayWithLimit` family (Session 25 Track C shortlist, P3) — not inspected at all yet, flagged as a good next candidate (same "WithLimit" bounds-hardening naming pattern as GPSCopy).

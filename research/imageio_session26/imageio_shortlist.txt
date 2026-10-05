@@ -1,0 +1,146 @@
+ImageIO.framework — iOS 27.0.1 (24A446) vs 27.2 beta (24B5089g) — Track C shortlist
+=====================================================================================
+
+METHOD: full non-Swift-mangled C/C++ symbol diff (14036 stable / 14080 beta functions),
+cross-checked against keyword-filtered strings diff (62124/63035 total strings).
+All disassembly done against the FULL dyld_shared_cache via `ipsw dyld disass`
+(never on a standalone-extracted dylib — see HANDOFF.md methodology section).
+
+ADDED SYMBOLS (full diff), grouped by relevance
+------------------------------------------------
+
+[P1 — CONFIRMED SECURITY FIX]
+  GPSCopy::checkCapacity(uint8_t*, size_t)              <- NEW
+  GPSCopy::checkInitializedLength(uint8_t*, size_t)     <- NEW
+  GPSCopy::checkCapacity(...).cold.1                    <- NEW (throws OutOfBounds)
+  GPSCopy::pointerToOffset(size_t)                      <- NEW
+  GPSCopy::read32Unchecked(uint8_t*)                    <- NEW (renamed from read32, identical body)
+  GPSCopy::copyFileWithGPSInformation().cold.1           <- NEW
+  class OutOfBounds (+ vtable/typeinfo: _ZTV/_ZTI/_ZTS11OutOfBounds) <- NEW exception type
+  REMOVED: GPSCopy::read32(uint8_t*)                     <- renamed, body unchanged
+
+[P2 — LIKELY SECURITY, NOT FULLY TRACED]
+  "*** DDS/ASTC: image dimensions overflow"              <- NEW string (explicit overflow guard msg)
+  __Z21CreateReader_DDS_ASTCv                            <- NEW factory (checked, body doesn't
+                                                             itself reference the overflow string —
+                                                             guard is in a decode function not yet
+                                                             located)
+  __ZL19DDSDXGIFormatIsASTCj                             <- NEW helper (format validation?)
+
+  rlebuf allocation error format: "size=%d" (stable) -> "size=%llu" (beta)
+                                                         <- size variable widened 32->64-bit,
+                                                            classic integer-overflow-class fix
+                                                            signature; containing function not
+                                                            yet located (xref-to-string-address
+                                                            not supported by available tooling
+                                                            without a full xref-graph pass)
+
+[P3 — TIFF DIRECTORY ENTRY ARRAY HARDENING, NOT YET TRACED]
+  TIFFReadDirEntryLong8ArrayWithLimit                    <- NEW ("WithLimit" suffix = bounds-limited
+                                                             variant pattern, same family as
+                                                             TIFFReadDirEntryLongArray/ShortArray/
+                                                             Slong(8)Array/Ifd8Array/FloatArray,
+                                                             which are themselves also new)
+  loadTIFFStructure                                       <- NEW
+  libtiff tif_dir.c (only build-UUID differs in path string — not itself evidence of a change,
+                      just confirms same source file, different build)
+
+[DISCARD — FEATURE, NOT SECURITY]
+  ISO5/HDR gain-map metadata support (new feature, iOS 27.2):
+    IIO_ColorSpaceCreateWithICCDataAndISO5Metadata, IIO_CreateColorSpaceCopyWithColorSyncISO5Metadata,
+    IIO_CreateImageCopyWithColorSyncISO5Metadata, IIO_CreateMergedISO5Metadata(+ .cold.1-4),
+    IIO_FloatsMatch, IIO_GetCLLFromISO5Dict, IIO_GetMDCVLuminanceFromISO5Dict, IIOImageIsHDR,
+    HEIFMainImage::getMaxContentLightLevel/hasISO5ContentLightLevelInfo/
+    getISO5MasteringDisplayColorVolume/hasISO5MasteringDisplayColorVolume,
+    HEIFCopyColorSyncISO5Metadata, CGColorSpaceCreateWithCopyOfDataAndMetadata
+  BCReadPlugin new pixel-format decode paths (decode1010102toRGBA16, decodePacked16toRGBA16,
+    decodeUncompressedToRGBA) — new format support, not a guard (decodeDXTCtoRGBX.cold.1 is the
+    one exception worth a second look if this thread is revisited — new cold/error path on an
+    EXISTING decoder, same shape as the GPSCopy pattern, just not pursued this session)
+  EXRReadPlugin::decodeBlockAppleEXR(...).cold.6 — new error path #6 on existing function, same
+    shape as above, also not pursued this session (OpenEXR has a real CVE history — worth
+    revisiting before BCReadPlugin if this thread continues)
+  ASTCTextureImp::MetalFormatForDXGIFormat + DDS/BC texture format plumbing — new Metal/DDS
+    texture format support, feature
+  sniffBC -> sniffDDS (renamed sniffer, cosmetic)
+  sniffOlympusRaw removed (folded into a generic sniffer, presumed refactor — not inspected)
+  IIOReader_RawCamera direct constructor -> CreateReader_RawCamera() factory function (refactor
+    pattern, body not inspected — low priority per GLM anti-pattern unless proven otherwise)
+  IIOPixelConverterRGB constructor gained 2 new bool params (purpose not inspected — could be
+    either a feature flag or a new validation toggle; flagged for follow-up only, not elevated to
+    P1/P2 without evidence)
+  unzClose added (minor, container-format plumbing)
+  XMP_Enforce assertion strings — unchanged logic, only embedded xbs build-UUID path differs
+
+TOP-3 (decompiled, per GLM guard/isomorphism SoP)
+--------------------------------------------------
+
+### #1 — GPSCopy (ImageIO, EXIF/TIFF GPS IFD parser) — CONFIRMED real bug, silently patched
+
+  Guard check (GLM criterion: does it validate INPUT, i.e. file-derived offset/length?): YES.
+  checkCapacity/checkInitializedLength both compute `(this->base + this->{capacity,initLength})
+  - ptr` and throw `OutOfBounds` (new C++ exception class, real vtable/typeinfo present) if the
+  result is negative OR smaller than the requested read size. This is a textbook bounds-check
+  guarding a buffer-relative pointer against both the full allocated capacity AND the actually
+  populated ("initialized") length — two separate checks, which rules out this being just a
+  cosmetic assert (GLM anti-pattern "nil-guard after isKindOfClass" does not apply here; this is
+  numeric range validation on parser-controlled offsets, not a type check).
+
+  Downstream isomorphism (GLM criterion: is everything after the guard byte-identical?): YES, in
+  the strongest form available for this case — the raw read primitive itself
+  (`read32`/`read32Unchecked`) is **byte-for-byte identical** between builds (confirmed instruction
+  by instruction), and the caller `adjustIFDOffsets(IFDData*, int, int)` is the same call in both
+  builds' `processData()`. What changed is purely the NUMBER of guard calls wrapped around the
+  existing read sites: **stable's `processData()` calls the raw `read32()` 3 times with ZERO
+  bounds-check calls anywhere in the function body** (only other call is the one
+  `adjustIFDOffsets`); **beta's `processData()` has the exact same overall shape but with 42 calls
+  to `checkCapacity`/`checkInitializedLength`/`pointerToOffset`/`read32Unchecked` combined**,
+  i.e. a bounds check inserted before essentially every pointer dereference in the IFD-walking
+  loop. This is the GLM pattern applied at *every read site in a loop* rather than once at a
+  function head, because that's the actual shape of the bug surface (a multi-field IFD struct
+  walk, not a single-entry-point function).
+
+  One-shot test (GLM criterion): stable, given a GPS IFD with an offset/count field that points
+  past the actual buffer, returns whatever `read32` happens to read from out-of-bounds memory
+  (classic OOB read — garbage GPS data, best case; a crash or info leak, worse case, depending on
+  what's mapped past the buffer). Beta, given the same input, throws `OutOfBounds` and aborts the
+  copy — valid input produces identical output in both builds; malformed input now fails cleanly
+  instead of reading OOB. Matches GLM's "validation always gives less" rule exactly.
+
+  Assessed severity: **out-of-bounds READ, confirmed by evidence; OOB WRITE not ruled out** — the
+  class is named `GPSCopy` (implies writing GPS data into a *new* output file/buffer via
+  `writeOutputFile`), and `pointerToOffset`/`checkCapacity` operate on what reads like a single
+  shared buffer struct (base+capacity+initLength fields at the same offsets used by both the
+  read-side checks), so the same offset-translation logic plausibly also gates write-side access
+  into that buffer — not traced in this session (would require disassembling
+  `readInputFile`/`writeOutputFile` and whatever drives the write path). Triggerable via: an EXIF
+  GPS IFD in a JPEG/TIFF/HEIC file processed through whatever OS-level flow invokes
+  `GPSCopy::copyFileWithGPSInformation()` (not identified in this session — likely Photos.app
+  metadata-copy/location-redaction path, i.e. "Remove Location" or similar; not confirmed).
+
+  Artifacts: `/tmp/imageio_out/GPSCopy_beta_*.asm` (5 new methods), `GPSCopy_stable_read32.asm`,
+  `GPSCopy_{stable,beta}_processData.asm` (265 vs 486 lines).
+
+### #2 — DDS/ASTC "image dimensions overflow" guard — lead only, not traced to completion
+
+  New explicit overflow-check error string exists in beta, plus a new `CreateReader_DDS_ASTC()`
+  factory and `DDSDXGIFormatIsASTC()` helper. Did **not** find the actual guard instruction or its
+  containing function this session — `CreateReader_DDS_ASTC()` itself (46 lines, disassembled) is
+  just a constructor/factory and does not reference the overflow string; the real check is in
+  some other (larger, not-yet-identified) decode function. Flagged for follow-up, not confirmed.
+
+### #3 — rlebuf allocation size format widening (%d -> %llu) — lead only, not traced to completion
+
+  Error-message format specifier for an RLE-decompression buffer allocation changed from `%d`
+  (32-bit) to `%llu` (64-bit unsigned) between builds — strong circumstantial signature of an
+  integer-overflow-class fix in a size computation (narrow accumulator silently wrapping/
+  truncating on large dimensions, undersized allocation, subsequent OOB write during RLE
+  decompression). Did **not** locate the containing function this session (no xref-to-string-
+  address search available in the `ipsw` CLI surface used; would need a full in-cache xref pass
+  or a brute-force scan of candidate RLE-related functions). Flagged for follow-up, not confirmed.
+
+NOT PURSUED THIS SESSION (noted for completeness, per GLM "cold path on existing function" shape
+— same signature as GPSCopy, so arguably should be next in line before BCReadPlugin/DDS if this
+track is revisited):
+  - EXRReadPlugin::decodeBlockAppleEXR(...).cold.6
+  - BCReadPlugin::decodeDXTCtoRGBX(...).cold.1
