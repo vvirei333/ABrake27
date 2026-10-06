@@ -1,0 +1,18 @@
+# CoreUI ASTC Decode Check
+# Session 30 — 2026-10-06
+
+## CoreUI.framework in beta DSC:
+  Path: /System/Library/PrivateFrameworks/CoreUI.framework/CoreUI
+  Size: ~0x4aadd000 VM
+
+## Checks performed:
+  1. ipsw dyld symaddr -i CoreUI 'CGImageSource'  → EMPTY (no imports)
+  2. ipsw dyld symaddr -i CoreUI 'ASTC'           → EMPTY
+  3. ipsw dyld symaddr -i CoreUI 'CUITexture'     → EMPTY  
+  4. ipsw dyld symaddr -i CoreUI 'compressedTexture' → EMPTY
+  5. CoreUI does NOT appear in "ipsw dyld imports ImageIO" output
+
+## VERDICT: CoreUI does NOT import ImageIO or any ASTC decode symbols.
+  CoreUI handles .car (Asset Catalog) files internally and does not route
+  through ImageIO's CGImageSource decode pipeline for texture decompression.
+  CoreUI is NOT a caller of the hardened ASTC code path.

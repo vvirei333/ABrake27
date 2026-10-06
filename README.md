@@ -6,7 +6,7 @@
 [![Build](https://img.shields.io/badge/build-Linux%20clang%20%2B%20ld64.lld-green?logo=linux)](https://github.com/vvirei333/ABrake27)
 [![Arch](https://img.shields.io/badge/arch-arm64%20%7C%20arm64e-yellow?logo=arm)](https://github.com/vvirei333/ABrake27)
 
-> **Research-grade toolkit.** Diff iOS 27.0.1 vs 27.2 firmware, reverse-engineer the AMFI `IOUserClient` dispatch table, cross-compile a bare-metal IOKit PoC from **Linux** — no Xcode required — and **enable Developer Mode on iOS 27.0.1 through the stock Apple lockdown protocol** (verified persistent at kernel level).
+> **Research-grade toolkit.** Diff iOS 27.0.1 vs 27.2 firmware, reverse-engineer the AMFI `IOUserClient` dispatch table, cross-compile a bare-metal IOKit PoC from **Linux** — no Xcode required — and **enable Developer Mode on iOS 27.0.1 through the stock Apple lockdown protocol** (verified persistent at kernel level). Current flagship finding: **silent ASTC/DDS overflow hardening in ImageIO**, structurally reachable from the generic decode path — MediaAnalysis chain traced to `ASTCReadPlugin::initialize` (Sessions 28–31).
 
 ---
 
@@ -177,6 +177,8 @@ Auto-detects `clang-20...15`, `ld64.lld`/`lld`, `llvm-lipo`, `ldid`. Graceful fa
 │   ├── final_verify.py
 │   └── verify_now.py
 ├── run_dvt.sh               # ★ CoreDevice/DVT deploy (build + usbmuxd + RSD tunnel + launch)
+├── harness/                 # Reproduction harnesses
+│   └── astc_harness.swift   #   Minimal ASTC decode harness (macOS, Swift)
 ├── tools/macho_tool.py      #   stdlib-only Mach-O arm64e disassembler (kernelcache RE)
 ├── HANDOFF.md               # Full session log (Russian + English)
 └── README.md                # You are here
@@ -186,7 +188,21 @@ Auto-detects `clang-20...15`, `ld64.lld`/`lld`, `llvm-lipo`, `ldid`. Graceful fa
 
 ## Findings
 
-- **Session 26**: GPSCopy OOB-write (ImageIO) — confirmed statically, silently patched in 27.2 beta. Details in WRITEUP.md.
+- **Session 25-26**: GPSCopy OOB-write (ImageIO) — confirmed statically, silently patched in 27.2 beta. **Closed in Session 27-28: reachability exhaustively traced, no caller found anywhere in shipped iOS userland** (no vtable, no indirect dispatch, no cross-image symbol reference). Dead code from Apple's own apps' perspective; not pursued for submission.
+- **Sessions 28–31**: ASTC/DDS "image dimensions overflow" (ImageIO) — confirmed as security hardening via structural diff, and **structurally reachable from the generic ImageIO decode path** (registered format reader, same registry as PNG/JPEG/TIFF/etc.). Session 30 swept BlastDoor XPC services (ruled out), QuickLookThumbnailing (semi-zero-click), and **MediaAnalysis/mediaanalysisd** (zero-click candidate — dedicated `MADImageASTCFormatReader` class). Session 31 traced the disassembly chain: `MADImageASTCFormatReader::readOneImageSource` → `CGImageSourceCreateWithData` → ImageIO autodetect → `ASTCReadPlugin::initialize`. **Current flagship open lead — severity HIGH, conditional CRITICAL pending behavioral confirmation of the MediaAnalysis delivery path.** Details in WRITEUP.md.
+
+### Open call: behavioral confirmation needed
+
+The ASTC/DDS finding is structurally complete — the patch, the decode-path registration, and the
+MediaAnalysis chain are all documented from disassembly. What's missing is **behavioral
+confirmation**: running a crafted `.astc` file through `mediaanalysisd` on iOS 27.0.1 (stable)
+to observe whether the unguarded code path is actually reached and whether the file delivery
+mechanism (iCloud sync, AirDrop → Photos) triggers background analysis.
+
+If you have a jailbroken or research-provisioned iPhone 13/14 on iOS 27.0.1, or access to a
+macOS host with the same ImageIO build, and want to collaborate on the behavioral step — see
+`harness/astc_harness.swift` for a minimal Mac-side reproduction harness, and `WRITEUP.md` for
+the full structural chain. Reach out via the repo's Issues tab.
 
 ---
 

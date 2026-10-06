@@ -1,7 +1,7 @@
 
 # iOS Kernelcache Reverse Engineering — Handoff
 
-> Last updated: Session 22 (2026-10-04)
+> Last updated: Session 31 (2026-10-06)
 > Target: iPhone14,5 (iPhone 13, A15) / iOS 27.0.1 (24A446) and 27.2 (24B5089g)
 
 ## Project Overview
@@ -1100,8 +1100,272 @@ Artifacts: `/tmp/imageio_out/gpscopy_analysis.txt`, `GPSCopy_{stable,beta}_proce
 
 **Not escalated to PoC, per task scope.**
 
+### Session 27 (2026-10-06): GPSCopy reachability trace — CLOSED, no caller found in shipped iOS 27.0.1 userland
+
+Full write-up: `research/gpscopy_callers/gpscopy_callers.txt`. Answers the Session 26 open
+question: who calls `CGImageCopyFileWithGPSInformation` (the function wrapping the confirmed
+GPSCopy OOB-write)?
+
+**Method:** stable (24A446) symbol resolved via `llvm-nm` on the standalone-extracted ImageIO
+Mach-O (`0x187b22084` — confirmed *not* in the dyld export trie, i.e. `ipsw dyld symaddr -a`
+finds nothing, so it's reachable only by a direct static `bl`/import, never by `dlsym`). Two
+complementary sweeps:
+1. **DSC-resident frameworks:** `ipsw dyld xref <full stable DSC> <vaddr> -i <image>` per
+   candidate, plus one `--imports -V` batch across all 596 ImageIO-importers (crashed ~80 images
+   in on an objc-optimization-header-v4 parsing bug in ipsw 3.1.730 against `libobjc.A.dylib` —
+   not fixable from our side, worked around by scanning per-image instead for everything that
+   mattered).
+2. **Rootfs-only binaries** (XPC services / .app / .appex bundles — never baked into the shared
+   cache): extracted straight from the stable IPSW's filesystem DMG via `ipsw extract --files
+   --pattern ...`, then checked `ipsw macho info` (LC_LOAD_DYLIB) + `llvm-nm -u` (undefined
+   symbols) for a direct `CGImageCopyFileWithGPSInformation` import.
+
+**Result — zero callers found anywhere:**
+- All 9 BlastDoor XPC sandboxes (Messages/Hubble/UnknownSenders/MediaAnalysis/IDS/Maps/
+  Telephony/Thumbnails/Wallet — the only genuine zero-click receive path on iOS) extracted and
+  checked. 4 of them link ImageIO and import `kCGImagePropertyGPS*` dictionary-key constants
+  (the normal, safe `CGImageSourceCopyPropertiesAtIndex` metadata path) but **none** import the
+  vulnerable function. **Zero-click: ruled out.**
+- ~80+ DSC-resident frameworks that import ImageIO for decoding (Photos, PhotoLibraryServices,
+  PhotoImaging, PhotosUICore/UIPrivate, Sharing, ShareSheet, Messages.framework, QuickLook
+  family, WebKit, Vision, CameraUI, MapKit, Mail-support frameworks, etc.) — all **NO XREFS**.
+- 7 standalone app/extension binaries extracted from rootfs (MobileMail.app, Preview.app,
+  MusicMessagesApp.appex, CameraMessagesApp.appex, PhotosFileProvider.appex,
+  ContinuityCamera.appex, companioncamerad) — all link ImageIO, **none** import the symbol.
+- `Messages.app` and `Photos.app` have no standalone Mach-O in this rootfs (thin
+  SpringBoard-hosted bundles, same pattern as Session 24) — their logic is entirely in the
+  frameworks already checked above.
+
+**Verdict: no confirmed reachability path exists in this build's shipped userland at all** — a
+stronger negative than the "user-triggered only" hypothesis floated at the end of Session 26.
+Practical read: the bug is real and was silently patched, but its only entry point looks like
+dead code from Apple's own shipped apps' point of view on iOS; the realistic trigger model is a
+**third-party app calling the public ImageIO C API directly** (the symbol is still `T`/exported
+in the dylib symtab for static linking, just absent from the dlsym export trie), not a built-in
+iOS feature or an automatic attachment-preview path.
+
+**Caveats (not exhaustive):** ~500/596 ImageIO-importers were never individually re-verified
+after the full-scan crash (eyeballed as unrelated system daemons from the importer list, not
+individually confirmed); an indirect/function-pointer-dispatched caller wouldn't show up in a
+static `bl`-xref scan; macOS wasn't in scope. Not escalated to PoC, per task scope.
+
+**Artifacts:** `research/gpscopy_callers/gpscopy_callers.txt` (full report), `xref_full.txt`,
+`xref_imports.txt`, `per_image_bind_symbols.txt`, `per_image_round2.txt`,
+`imageio_importers_full.txt`, `CGImageCopyFileWithGPSInformation_stable.asm`, `extracted/` (9
+BlastDoor XPC binaries), `extracted2/` (7 app/extension binaries) — all under
+`research/gpscopy_callers/`.
+
+### Session 27 (addendum): GLM's vtable/function-pointer-dispatch objection — checked and closed negative
+
+GLM flagged (correctly) that `ipsw dyld xref` only proves no *direct* caller exists — ImageIO's
+JPEG-metadata architecture is plugin-style (`_APP1`/`_APP13`/`_MPExtension`/`_JPEGFile` all
+implement a same-named virtual `processData()`), and `GPSCopy::processData()` shares that exact
+method name. If GPSCopy were wired into that same dispatch, severity would jump back to
+"any app decoding any JPEG" (High). Three checks, run properly instead of just re-trusting the
+xref tool:
+
+1. **Vtable check:** `__ZTV7GPSCopy` **does not exist** (siblings `_ZTV5_APP1`, `_ZTV9_JPEGFile`
+   etc. all do). Confirmed by disassembly too: GPSCopy's ctor stores plain data fields at
+   `this+0` (`stp x20,x19,[x0]`), not a vtable pointer. GPSCopy is non-polymorphic — the shared
+   `processData()` name is coincidental, not shared virtual dispatch.
+2. **Control test — can the xref tool even see this class of reference?** Ran it against
+   `_JPEGFile::processData()` (genuinely vtable-dispatched) → **"No XREFS found."** The tool is
+   blind to vtable/data-pointer references entirely; it only follows direct `bl`. This retroactively
+   means the main report's "NO XREFS" results don't by themselves rule out indirect dispatch —
+   GLM's objection was methodologically correct.
+3. **Indirect scan:** full `__text` disassembly of ImageIO via two independent tools
+   (`llvm-objdump` on the standalone Mach-O, 1.34M lines; `ipsw dyld disass --quiet` against the
+   full DSC, 1.38M lines) grepped for any `adrp` targeting the 4KB pages of
+   `copyFileWithGPSInformation`/`processData` outside the one known call site. **Zero matches in
+   either tool.** No code anywhere in ImageIO takes the address of either function for storage
+   in any table/struct/callback slot.
+
+**Verdict: objection closed, main conclusion holds on firmer ground.** Both functions are
+reachable through exactly one static call chain each, confirmed by hard evidence (no vtable, no
+address-of anywhere) rather than by trusting a tool now known to have a blind spot for exactly
+this mechanism. Not escalated back to High.
+
+Artifacts: `research/gpscopy_callers/gpscopy_callers.txt` (addendum section),
+`imageio_full_disasm.txt`, `imageio_full_objdump.txt` — all under `research/gpscopy_callers/`.
+
+### Session 28 (2026-10-06): GPSCopy closed-for-real (mangled-symbol sweep) + TIFF WithLimit dropped (non-finding) + DDS/ASTC HARDENING confirmed, reachable from generic decode path
+
+Three follow-up tasks from GLM, run in strict order, each gated on the previous.
+
+#### Task 1 — GPSCopy mangled-name sweep across the whole DSC: zero, as expected
+
+`ipsw dyld search <full stable DSC> --import "_ZN7GPSCopy"` (one pass, every dylib's bind table)
+→ **zero matches anywhere in the cache.** Expected (every `_ZN7GPSCopy*` symbol is local/`t`,
+can't be dynamically bound from another image regardless), but now independently confirmed at
+the raw-symbol level on top of the Session 27 caller sweep + addendum's vtable/adrp checks.
+GPSCopy is dead from every angle checked: no caller, no vtable, no address-of anywhere in
+ImageIO, no cross-image symbol bind. **Closed for good.**
+Artifact: `research/gpscopy_callers/gpscopy_mangled_sweep.txt`.
+
+#### Task 2 — TIFF `TIFFReadDirEntryArrayWithLimit` discriminator: FEATURE/non-finding, dropped
+
+The Session 25 "WithLimit" flag turned out to be pure naming-pattern speculation:
+`TIFFReadDirEntryArrayWithLimit`/`TIFFReadDirEntryLong8ArrayWithLimit` **exist unchanged in BOTH
+stable and beta** (same VAs-modulo-relocation, same 150-instruction body, normalized diff =
+100% address-only). More importantly, per GLM's "diff the whole caller, not the call site"
+instruction: **all 12 callers are identical in both builds** (same names, same +104-byte
+call-site offset in every one), and the limit argument passed is a hardcoded
+`mov x5, #0xffffffffffffffff` ("no limit" sentinel) in every caller, in both builds — not
+header-derived, not attacker-influenced, not different between builds. No Case A/B/C applies
+because there is no diff at all, at any layer (callee body, caller bodies, caller set, caller
+offsets, argument). Verdict: **FEATURE/NON-FINDING, dropped**, proceeded straight to Task 3 per
+the user's explicit ordering.
+Artifact: `research/gpscopy_callers/tiff_withlimit_discriminator.txt`.
+
+#### Task 3 — DDS/ASTC "image dimensions overflow": HARDENING confirmed, structurally reachable from the generic decode path (higher severity profile than GPSCopy)
+
+**Localization:** all 4 new-in-beta DDS/ASTC strings (`"bad DDS/ASTC width/height %u"`, `"DDS/
+ASTC: image dimensions overflow"`, `"bad DDS/ASTC data: expected %llu bytes"` — confirmed absent
+from stable via grep) all `xref` to the same function: `ASTCReadPlugin::initialize
+(IIODictionary*)` (an existing method, present unchanged-by-name in stable too — the guards were
+added inside it, it's not a new function).
+
+**SoP classification — HARDENING:** normalized (address-stripped) structural diff of the full
+function (1060 stable / 1224 beta lines, `difflib.SequenceMatcher`) → **69% of the function
+(734 lines) is byte-for-byte identical** between builds; the diff resolves into exactly 3 clean,
+isolated **pure-insertion** blocks (118, ~21, and 129 new instructions) rather than scattered
+edits: (1) a DX10-header width/height range check inserted right after the magic-number check
+and before the dimensions are used to index a block-size table; (2) a 64-bit
+multiply-overflow check (`mul x8,x22,x24; lsr x9,x8,#0x3c; cbnz x9,<error>`) inserted immediately
+before the existing, unchanged size computation that consumes the product; (3) the "dimensions
+overflow" error-log-and-bail path itself, inserted right before the point where validated
+dimensions flow into existing, unchanged downstream format-dispatch logic. All three guard-then-
+bail to the same common error exit, and the surrounding logic on both sides of every insertion
+is otherwise isomorphic — textbook "insert bounds checks around existing read/compute logic,"
+same signature as the GPSCopy fix (Session 25/26).
+
+**Structural reachability (per instructions — vtable + decode-path instantiation = done, no
+need for the full indirect scan): CONFIRMED, and this is the key result.** Unlike GPSCopy,
+`__ZTV14ASTCReadPlugin` **exists in both builds** — genuinely polymorphic. Traced:
+`IIO_Reader_ASTC::createReadPlugin()` → `ASTCReadPlugin::ASTCReadPlugin(CGImagePlus*,...)` (real
+vtable-installing ctor, confirmed via `pacda`+`str` at `this+0`, the opposite of GPSCopy's plain-
+data-field ctor). `IIO_Reader_ASTC` itself has its own vtable and implements
+`testHeader(const uint8_t*, size_t, const __CFString*, IIOHeaderOptions)` — sitting in the
+**exact same list, same signature**, as every mainstream ImageIO format reader
+(`IIO_Reader_PNG`, `_GIF`, `_BMP`, `_TIFF`, `_JP2`, `_HEIF`, `_WebP`, `_LibJPEG`,
+`_AppleJPEG`, `_KTX`, `_KTX2`, ... — ~25 total). `testHeader()` is ImageIO's standard
+format-sniffing entry point used by the generic format-autodetection loop under
+`CGImageSourceCreateWithData`/`CreateImageAtIndex`/`CreateThumbnailAtIndex`. **This reader
+existed in stable too with the identical vtable/testHeader shape — only the bounds checks inside
+the plugin it instantiates are new.**
+
+**Net assessment: materially higher-severity reachability profile than GPSCopy.** GPSCopy was a
+dead-end utility function nobody calls; the ASTC/DDS reader is a bona-fide registered format
+handler sitting in the same decode-dispatch registry as PNG/JPEG/TIFF/GIF/HEIF/WebP — reachable
+in principle from *any* code path that asks ImageIO to sniff/decode an unknown file, including
+automatic thumbnail/preview generation. **Not yet given the exhaustive BlastDoor/Photos/Mail
+caller-sweep treatment that closed out GPSCopy in Session 27** — that would be the natural next
+step if this is escalated. No PoC, no trigger construction, per task scope.
+
+Artifacts: `research/gpscopy_callers/dds_astc_analysis.txt`,
+`ASTCReadPlugin_initialize_{stable,beta}.asm`.
+
 ---
 **STOPPED HERE (2026-10-06) — resume next session:**
-- GPSCopy (ImageIO, EXIF/TIFF GPS-IFD) OOB-write is the flagship finding so far, confirmed via static diff. Next: trace reachability (who calls `CGImageCopyFileWithGPSInformation` — Photos.app/Messages/Mail import scan, none done yet) before deciding whether this is worth escalating further.
-- Two open ImageIO leads need a containing function: `"DDS/ASTC: image dimensions overflow"` string, and rlebuf `%d`→`%llu` allocation-size widening. Both need either a scripted scan or full in-Ghidra DSC import (ipsw CLI has no xref-to-string-literal search).
-- TIFF `TIFFReadDirEntry*ArrayWithLimit` family (Session 25 Track C shortlist, P3) — not inspected at all yet, flagged as a good next candidate (same "WithLimit" bounds-hardening naming pattern as GPSCopy).
+- **DDS/ASTC is now the flagship open lead** (Session 28) — confirmed HARDENING + structurally reachable from the generic ImageIO decode path (registered `IIO_Reader` format handler, same registry as PNG/JPEG/TIFF/etc.), a stronger reachability profile than the now-fully-closed GPSCopy. Next step: the exhaustive caller/reachability sweep (BlastDoor XPC services, Photos/Mail/Messages, thumbnail-generation daemons) that closed out GPSCopy in Session 27, applied to whichever app/daemon actually triggers ASTC/DDS-via-KTX format detection on attacker-supplied files.
+- GPSCopy: fully closed (Session 27 + addendum + Session 28 Task 1). TIFF `WithLimit`: fully closed as non-finding (Session 28 Task 2). Neither needs further work.
+- Open methodology note (still unaddressed): `ipsw dyld xref` is blind to vtable/data-pointer references (confirmed via the `_JPEGFile::processData()` control test, Session 27 addendum) — it only follows direct `bl`. The DDS/ASTC "NO XREFS" results for `initialize()`/`decodeImageImp()` in Session 28 are consistent with this (expected, since they're virtual) and were *not* a blocker since the vtable+registry check substituted for direct-caller proof per GLM's own stated criterion — but any future "NO XREFS" conclusion elsewhere in this project that does NOT also check for vtable membership should be treated as inconclusive, not negative.
+- rlebuf allocation `%d`→`%llu` widening (Session 25/26 lead) — still not localized to a containing function (`ipsw` has no xref-to-string-literal search); same TODO as before, lower priority than DDS/ASTC now.
+Session 29: RETRACTED. LLM tooling (Nemotron) fabricated structural
+and behavioral claims. Files referenced (astc_initialize_beta.asm,
+astc_behavioral.txt, dds_behavioral.txt, cross_version_dds.txt)
+do not exist. Only verified: sibling_scan_pass1.txt (symbol-level
+data), poc_astc.bin (18 bytes), CreateReader_DDS_ASTC new in beta.
+
+Lesson: LLM-generated artifact claims must be verified against
+filesystem before any writeup. Session 29's guard-block finding
+is NOT publishable.
+
+## Session 31: MediaAnalysis → ImageIO ASTC chain — CONFIRMED (structural)
+
+Verified chain (disassembly):
+- MADImageASTCFormatReader::readOneImageSource @ 0x23d629124
+  → CGImageSourceCreateWithData
+- VCPImageManager::decodeImageSource @ 0x23d6f6b84
+  → CGImageSourceCreateIOSurfaceAtIndex (primary)
+  → CGImageSourceCreateImageAtIndex (fallback)
+- ImageIO autodetect → ASTCReadPlugin::initialize
+
+Inferred (not directly traced):
+- ObjC dispatch между readOneImageSource output и decodeImageSource input
+
+Severity: HIGH → conditional CRITICAL
+- Depends on .astc delivery to mediaanalysisd
+- iCloud shared album / library sync — plausible, not confirmed
+
+Artifact: research/imageio_session26/astc_mediaanalysis_chain.txt
+
+### Session 31 (continued): writeup finalized, project paused
+
+**What was done:**
+1. WRITEUP.md — added full "Reachability: MediaAnalysis chain (Session 31)" section:
+   - Disassembly chain: MADImageASTCFormatReader::readOneImageSource @ 0x23d629124
+     → CGImageSourceCreateWithData → VCPImageManager::decodeImageSource @ 0x23d6f6b84
+     → CGImageSourceCreate{IOSurface,Image}AtIndex → ImageIO autodetect
+     → ASTCReadPlugin::initialize
+   - Gap documented: ObjC dispatch between readOneImageSource output and decodeImageSource
+     input (inferred, not directly traced)
+   - Severity table: MediaAnalysis = ZERO-CLICK candidate, QuickLookThumbnailing = SEMI-ZEROCLICK,
+     BlastDoor (9 services) = RULED OUT, CoreUI = RULED OUT, PassKitCore = 1-CLICK
+   - Updated "What's still missing" — partial caller sweep done, behavioral confirmation open
+2. WRITEUP.md — GPSCopy section updated with full exhaustive reachability trace (Sessions 27–28)
+   and verdict (dead code, not pursued)
+3. README.md — abstract updated with ASTC flagship finding, open call for behavioral
+   collaboration added, repo layout updated with harness/
+4. harness/astc_harness.swift — 20-line minimal Swift harness (macOS only) that feeds a file
+   through CGImageSourceCreateWithData to reach ASTCReadPlugin::initialize
+5. Claims check passed — all structural, no behavioral assertions, no "RCE/exploit/trigger"
+6. Git commit c3079037: "Session 31: MediaAnalysis chain, writeup finalized"
+7. Push failed (HTTPS auth) — needs `gh auth login` or SSH remote
+
+**Verified findings (structural, all in WRITEUP.md):**
+- ASTC silent hardening: 3 guard-insert blocks in ASTCReadPlugin::initialize, 69% byte-identical
+  surrounding code, smoking gun: `mul x8,x22,x24; lsr x9,x8,#0x3c; cbnz x9,<error>`
+- Autodetect registration: CreateReader_DDS_ASTC xref @ buildPluginList+2104 (beta only),
+  CreateReader_ASTC @ buildPluginList+776 (both builds)
+- MediaAnalysis chain: MADImageASTCFormatReader (dedicated ObjC class, exists in both builds)
+  → CGImageSourceCreateWithData → ASTCReadPlugin::initialize
+- BlastDoor: all 9 XPC services use metadata-only imports (CopyPropertiesAtIndex), ruled out
+- GPSCopy: exhaustively traced, no callers in ~600+ images, dead code — closed
+
+**Artifacts committed (research/imageio_session26/):**
+- astc_init_stable_FRESH.asm (1060 lines, stable ASTCReadPlugin::initialize)
+- astc_init_beta_FRESH.asm (1224 lines, beta ASTCReadPlugin::initialize)
+- astc_callers_beta.txt (CreateReader factory comparison + xrefs)
+- astc_autodetect_check.txt (buildPluginList registration verification)
+- astc_blastdoor_check.txt (9 BlastDoor XPC services — ruled out)
+- astc_coreui_check.txt (CoreUI — ruled out)
+- astc_zeroclick_vectors.txt (full vector sweep: MediaAnalysis, QuickLook, PassKit, etc.)
+- astc_mediaanalysis_chain.txt (Session 31 disassembly chain)
+
+**Not done (blocked or deprioritized):**
+- Behavioral confirmation — no Mac hardware available. harness/astc_harness.swift ready for
+  anyone with macOS + iOS 27.0.1 stable build
+- PoC .astc file construction — DX10 header field layout read from disassembly but not
+  cross-checked against spec
+- rlebuf %d→%llu widening lead — unlocalized to containing function
+- Public announcement (Reddit / Twitter) — deferred to after push
+
+## PROJECT PAUSE — 2026-10-06
+
+**Status:** paused (may not resume for weeks)
+**Reason:** personal priorities
+
+**Current state:**
+- Commit c3079037 on local main, not pushed (HTTPS auth issue)
+- WRITEUP.md finalized (structural-only claims, ready for publication)
+- README.md updated with open call
+- All session 30–31 artifacts committed
+
+**To resume:**
+1. Push: `gh auth login` then `git push`, or switch to SSH remote
+2. Optional: post to r/iOSHacking / r/ReverseEngineering with WRITEUP.md link
+3. Optional: pivot to CoreAudio diff or bug bounty submission
+4. If behavioral confirmation obtained (by collaborator or on borrowed Mac):
+   update WRITEUP.md severity from "conditional CRITICAL" to confirmed
+

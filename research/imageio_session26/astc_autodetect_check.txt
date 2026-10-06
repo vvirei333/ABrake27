@@ -1,0 +1,44 @@
+# ASTC Autodetect Registration Verification
+# Session 30 — 2026-10-06
+
+## IIO_ReaderHandler::buildPluginList — xref confirmed call chain:
+
+  buildPluginList() calls ALL CreateReader_* factories to populate
+  the format-sniffing registry. Each factory returns an IIO_Reader
+  subclass with testHeader() and createReadPlugin() implementations.
+
+  When a client calls CGImageSourceCreateImageAtIndex:
+    1. ImageIO iterates the plugin list
+    2. Each reader's testHeader() is called against the file header
+    3. First match wins → createReadPlugin() instantiates the decoder
+    4. Reader::initialize() parses the format-specific header
+       ← THIS is where ASTCReadPlugin::initialize runs
+       ← THIS is where the hardened bounds checks were added in beta
+
+## Xref evidence:
+  CreateReader_ASTC     → buildPluginList+776    (both stable & beta)
+  CreateReader_DDS_ASTC → buildPluginList+2104   (beta ONLY — new format)
+
+## _IIO_ReaderSelection data:
+  Address: 0x1eb04cde0 (data segment)
+  Contains the compiled reader selection table used at runtime
+
+## Attack surface via autodetect:
+  598 frameworks/binaries import ImageIO in the beta DSC.
+  
+  Key high-value callers that use CGImageSourceCreateImageAtIndex:
+  - WebKit.framework / WebCore.framework (Safari, in-app browsers)
+  - MobileSafari.framework
+  - Message.framework (Mail)
+  - ChatKit.framework (Messages — but NOT via BlastDoor XPC)
+  - Photos.framework / PhotoLibraryServices.framework
+  - QuickLookUICore.framework (file previews)
+  - SpringBoardFoundation.framework
+  - ShareSheet.framework
+  - Vision.framework (ML image processing)
+  - CoreImage.framework
+
+## VERDICT: ASTC decode path is FULLY REGISTERED in the autodetect pipeline.
+  Any of the 598+ ImageIO importers that calls CGImageSourceCreateImageAtIndex
+  on a file with ASTC/DDS-ASTC magic bytes will reach ASTCReadPlugin::initialize,
+  triggering the code path that was hardened in the beta.

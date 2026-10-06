@@ -1,0 +1,13 @@
+MADImageASTCFormatReader
+  ↓
+readOneImageSource @ 0x23d629124
+  → CGImageSourceCreateWithData_stub
+  → container magic 0x434B4149 (checked in readPList)
+  ↓
+VCPImageManager::decodeImageSource @ 0x23d6f6b84
+  → CGImageSourceCreateIOSurfaceAtIndex_stub (primary)
+  → fallback @ 0x23d6f6c88: CGImageSourceCreateImageAtIndex
+  ↓
+ImageIO autodetect
+  → buildPluginList
+  → ASTCReadPlugin::initialize (Session 30 xref)

@@ -1,0 +1,144 @@
+# Alternative Zero-Click Vector Analysis — ASTC/DDS decode path
+# Session 30 — 2026-10-06
+# Beta DSC: 24B5089g__iPhone14,5 | Stable DSC: 24A446__iPhone14,5
+
+## Summary Table
+
+| Процесс                    | ImageIO link | decode imports                          | ASTC strings         | Вердикт        |
+|-----------------------------|-------------|----------------------------------------|----------------------|----------------|
+| QuickLookThumbnailing       | YES (598)   | CGImageSourceCreateImageAtIndex YES    | iCloud Drive thumb   | SEMI-ZEROCLICK |
+|                             |             | CGImageSourceCreateThumbnailAtIndex YES|                      |                |
+| QuickLookThumbnailingDaemon | YES (598)   | CGImageSourceCreateImageAtIndex YES    | none                 | SEMI-ZEROCLICK |
+| MediaAnalysis               | YES (598)   | CGImageSourceCreateImageAtIndex YES    | MADImageASTCFormat-  | ZEROCLICK      |
+|                             |             | CGImageSourceCreateIOSurfaceAtIndex YES| Reader (dedicated!)  |                |
+| PassKitCore                 | YES (598)   | CGImageSourceCreateImageAtIndex YES    | none (false pos)     | 1-CLICK        |
+|                             |             | CGImageSourceCreateThumbnailAtIndex YES|                      |                |
+| UserNotificationsServer     | YES (598)   | NONE                                   | none                 | NEGATIVE       |
+| UserNotificationsCore       | YES (598)   | NONE                                   | none                 | NEGATIVE       |
+
+## Detailed Analysis
+
+### 1. MediaAnalysis / mediaanalysisd — ZERO-CLICK CANDIDATE
+
+**STRONGEST FINDING.** MediaAnalysis.framework contains a DEDICATED ASTC reader:
+
+  Class: MADImageASTCFormatReader
+  Methods:
+    +[MADImageASTCFormatReader isValidASTCExtension:]
+    -[MADImageASTCFormatReader initWithData:]
+    -[MADImageASTCFormatReader readOneImageSource]
+    -[MADImageASTCFormatReader readNextImageSource]
+    -[MADImageASTCFormatReader readPList]
+    -[MADImageASTCFormatReader readDataToBuffer:Position:Length:]
+
+  Source path (from debug strings):
+    .../Sources/MediaAnalysis/MediaAnalysis/MADImageASTCFormatReader.mm
+
+  STABLE: MADImageASTCFormatReader EXISTS in stable (27.0.1) — same symbol set
+  BETA:   MADImageASTCFormatReader EXISTS in beta (27.2) — same symbol set
+
+  Decode imports (BOTH builds):
+    _CGImageSourceCreateImageAtIndex          — full decode
+    _CGImageSourceCreateIOSurfaceAtIndex      — IOSurface decode (ML pipeline)
+
+  Background context (from strings):
+    - "background analysis service" — runs as daemon
+    - "BackgroundAnalysisProgressHistory" — persistent background processing
+    - "PhotoLibraryServices" — processes Photo Library contents
+    - "iCloud/Proto/" paths — processes iCloud-synced assets
+    - "VCPAnalysisProgressQueryScanPhotoLibraryFetch" — scans entire library
+
+  ZERO-CLICK SCENARIO:
+    1. Attacker sends ASTC file via AirDrop → accepted into Photos
+    2. OR: attacker places ASTC file in shared iCloud Drive folder
+    3. OR: ASTC file arrives as iMessage attachment (saved to Photos)
+    4. mediaanalysisd processes new Photos Library assets in background
+    5. MADImageASTCFormatReader::isValidASTCExtension: matches the file
+    6. readOneImageSource → CGImageSourceCreateImageAtIndex/CreateIOSurfaceAtIndex
+    7. ImageIO autodetect → ASTCReadPlugin::initialize (VULNERABLE in stable)
+
+  CAVEAT: The MADImageASTCFormatReader may have its own parsing path
+  that bypasses ImageIO (reads ASTC data directly via readDataToBuffer).
+  The CGImageSourceCreateImageAtIndex import may be used for OTHER
+  image formats, not specifically for ASTC. Without behavioral testing,
+  the exact call chain through MADImageASTCFormatReader → ImageIO ASTC
+  is structural evidence, not confirmed execution.
+
+### 2. QuickLookThumbnailing — SEMI-ZEROCLICK
+
+  Decode imports:
+    _CGImageSourceCreateImageAtIndex          — full decode
+    _CGImageSourceCreateThumbnailAtIndex      — thumbnail decode
+    _CGImageSourceCreateWithData
+    _CGImageSourceCreateWithURL
+
+  Key strings:
+    "com.apple.private.quicklook.notification" — notification thumbnail
+    "com.apple.private.usernotifications.attachment" — notification attachments
+    "Successfully generated iCloud Drive thumbnail for %@"
+    "eThumbnailsAtBackgroundPriority"
+
+  SEMI-ZEROCLICK SCENARIO:
+    1. ASTC file arrives in iCloud Drive (shared folder)
+    2. System generates thumbnail automatically (background priority)
+    3. QuickLookThumbnailing → CGImageSourceCreateThumbnailAtIndex
+    4. ImageIO autodetect → ASTCReadPlugin::initialize
+
+  CAVEAT: QuickLookThumbnailing may filter by UTI before decode.
+  ASTC has no standard UTI in iOS (unlike PNG/JPEG). If the UTI
+  check rejects unknown types before CGImageSourceCreate*, the
+  decode path is not reached. Structural evidence only.
+
+  ALSO: Notification attachments trigger thumbnail generation
+  (com.apple.private.usernotifications.attachment). A push
+  notification with an image attachment URL pointing to an ASTC
+  file could trigger decode — but this requires the app to
+  explicitly set the attachment type.
+
+### 3. PassKitCore / passd — 1-CLICK
+
+  Decode imports:
+    _CGImageSourceCreateImageAtIndex          — full decode
+    _CGImageSourceCreateThumbnailAtIndex      — thumbnail decode
+
+  No ASTC-specific strings (false positives from "last" substring).
+
+  1-CLICK: .pkpass files contain images (logo, strip, thumbnail).
+  PassKit decodes these when a pass is added to Wallet.
+  User must tap "Add to Wallet" — not zero-click.
+
+  LOW PRIORITY: .pkpass images are typically PNG/JPEG.
+  ASTC in a .pkpass is non-standard and likely rejected by format validation.
+
+### 4. UserNotifications — NEGATIVE
+
+  UserNotificationsServer: NO CGImageSource imports at all.
+  UserNotificationsCore:   NO CGImageSource imports at all.
+
+  UserNotifications delegates image processing to QuickLookThumbnailing
+  (via com.apple.private.usernotifications.attachment entitlement).
+  The decode happens in QuickLookThumbnailing, not in the notification
+  daemon itself.
+
+## Revised Severity Assessment
+
+  Previous verdict:  HIGH (no zero-click, 1-click via Mail/Safari/QuickLook)
+  Updated verdict:   HIGH → potentially CRITICAL pending behavioral verification
+
+  REASON: mediaanalysisd (background daemon) has dedicated ASTC support
+  (MADImageASTCFormatReader) AND imports CGImageSourceCreateImageAtIndex.
+  If the ASTC decode path through mediaanalysisd reaches ImageIO's
+  ASTCReadPlugin::initialize, this is a ZERO-CLICK vector via:
+  - iCloud Drive shared folder (attacker-controlled file placement)
+  - AirDrop-accepted files saved to Photos
+  - Photos processed from iCloud Photo Library sync
+
+  CRITICAL CAVEAT: Without behavioral testing (running on actual device),
+  we cannot confirm that MADImageASTCFormatReader routes through ImageIO's
+  ASTCReadPlugin. It may parse ASTC internally. This is STRUCTURAL
+  evidence of a zero-click path, not CONFIRMED zero-click.
+
+## Files extracted for this analysis (scratchpad, not committed):
+  QuickLookThumbnailing, QuickLookThumbnailingDaemon,
+  MediaAnalysis (beta + stable), PassKitCore,
+  UserNotificationsServer, UserNotificationsCore

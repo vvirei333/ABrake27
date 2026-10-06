@@ -1,0 +1,67 @@
+# ASTC/DDS Caller & Reachability Sweep — Beta DSC (24B5089g, iPhone14,5)
+# Session 30 — 2026-10-06
+
+## Task 1: CreateReader factory comparison (stable vs beta)
+
+### NEW factories in beta (not in stable):
+  CreateReader_DDS_ASTC  @ 0x187a4f144  (NEW — beta only)
+  CreateReader_RawCamera @ 0x187a0e460  (NEW — beta only, takes IIODictionary*)
+
+### Factories present in BOTH builds (42 total):
+  CreateReader_GIF, CreateReader_AppleJPEG, CreateReader_PNG, CreateReader_TIFF,
+  CreateReader_ATX, CreateReader_ASTC, CreateReader_KTX2, CreateReader_JP2,
+  CreateReader_KTX_ASTC, CreateReader_KTX_BC, CreateReader_KTX_ETC,
+  CreateReader_KTX_PVR, CreateReader_KTX, CreateReader_KTX2_ASTC,
+  CreateReader_KTX2_BC, CreateReader_KTX2_ETC, CreateReader_KTX2_PVR,
+  CreateReader_AVCI, CreateReader_DICOM, CreateReader_AVIS, CreateReader_AVIF,
+  CreateReader_HEIC, CreateReader_HEICS, CreateReader_JPEGXL, CreateReader_PDF,
+  CreateReader_ICO, CreateReader_ICNS, CreateReader_HEIC_JPEG, CreateReader_PSD,
+  CreateReader_HEIF, CreateReader_BMP, CreateReader_AI, CreateReader_CUR,
+  CreateReader_WebP, CreateReader_MPO, CreateReader_PVR, CreateReader_TGA,
+  CreateReader_EXR, CreateReader_RAD, CreateReader_PBM, CreateReader_LibJPEG,
+  CreateReader_DDS_BC
+
+### ASTCReadPlugin vtable:
+  __ZTV14ASTCReadPlugin — present in BOTH stable and beta
+  Stable: exists (llvm-nm confirms local 't' symbol)
+  Beta:   exists (llvm-nm confirms local 't' symbol)
+
+## Task 2: Xref on CreateReader_DDS_ASTC
+
+### Result:
+  CreateReader_DDS_ASTC (0x187a4f144) — 1 xref:
+    0x18781ce44: IIO_ReaderHandler::buildPluginList() + 2104
+
+### Confirmation — CreateReader_ASTC also in buildPluginList:
+  CreateReader_ASTC (0x18781e628) — 1 xref:
+    0x18781c914: IIO_ReaderHandler::buildPluginList() + 776
+
+### Interpretation:
+  Both ASTC reader factories are registered into the IIO_ReaderHandler plugin list.
+  This is the AUTODETECT pathway — when CGImageSourceCreateImageAtIndex is called,
+  ImageIO iterates buildPluginList entries, calls testHeader() on each, and the
+  matching reader's createReadPlugin() instantiates the decoder (ASTCReadPlugin).
+  
+  The hardened ASTCReadPlugin::initialize code is therefore reachable from ANY
+  caller that decodes an image via CGImageSourceCreateImageAtIndex on a file
+  whose header matches the ASTC/DDS-ASTC magic bytes.
+
+## Task 3: Autodetect registration
+
+### IIO_ReaderSelection data symbol:
+  _IIO_ReaderSelection @ 0x1eb04cde0 (data segment, beta)
+
+### IIO_Reader class methods confirmed:
+  IIO_Reader::testHeader(const unsigned char*, unsigned long, ...)
+  IIO_Reader::createReadPlugin(CGImagePlug*, unsigned int, long long)
+  IIO_Reader::testHeaderSize()
+  IIO_Reader::minimumFileSize()
+
+### ASTC/DDS-related CreateReader factories (13 total):
+  CreateReader_ASTC, CreateReader_KTX_ASTC, CreateReader_KTX2_ASTC,
+  CreateReader_DDS_ASTC (NEW), CreateReader_KTX, CreateReader_KTX2,
+  CreateReader_KTX_BC, CreateReader_KTX_ETC, CreateReader_KTX_PVR,
+  CreateReader_KTX2_BC, CreateReader_KTX2_ETC, CreateReader_KTX2_PVR,
+  CreateReader_DDS_BC
+
+### Verdict: REGISTERED in autodetect pipeline via IIO_ReaderHandler::buildPluginList

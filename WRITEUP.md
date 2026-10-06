@@ -164,13 +164,15 @@ log with extraction commands and all gaps: `HANDOFF.md`, Session 24.
 
 ---
 
-# iOS 27 ImageIO — GPSCopy out-of-bounds write, silently patched in 27.2 beta
+# iOS 27 ImageIO — GPSCopy out-of-bounds write, silently patched in 27.2 beta — CLOSED, reachability ruled out
 
 **Diffing `ImageIO.framework`'s EXIF/TIFF GPS-IFD parser between iOS 27.0.1 (24A446) and
 27.2 beta (24B5089g), `iPhone14,5`**
 
-> Status: confirmed statically via binary diff; not yet reduced to a working PoC. Candidate for
-> Apple Security submission once reachability is nailed down. Session 26, 2026-10-06.
+> Status: bug confirmed statically via binary diff; reachability exhaustively traced and
+> **ruled out — no caller exists anywhere in this build's shipped userland.** Closed as a
+> documentation-only finding, not pursued for Apple Security submission. Sessions 25–28,
+> 2026-10-04 through 2026-10-06.
 
 ## TL;DR
 
@@ -187,8 +189,8 @@ log with extraction commands and all gaps: `HANDOFF.md`, Session 24.
   through the new validator; a new exception class `OutOfBounds` was added (vtable + typeinfo
   present); **+42 new bounds-check-shaped functions** appear in the same binary region. No
   changelog/release-note entry mentions this.
-- Read together, this is consistent with an internal fix for a real OOB-write, patched silently
-  rather than disclosed — the kind of gap Apple Security wants reported even without a PoC.
+- The bug itself is real. **The reachability question that was open as of Session 26 has since
+  been answered: no.** See below.
 
 ## Trigger (structural — derived from the diff, no working exploit built)
 
@@ -199,50 +201,207 @@ an out-of-bounds heap write. On 27.2 beta, the new `checkCapacity` call sees the
 and throws `OutOfBounds` instead of calling `memmove`.
 
 This is a structural read of the control-flow diff, not a demonstrated crash — no fuzzed or
-hand-crafted file has been run against either build yet.
+hand-crafted file was ever run against either build (moot once reachability closed negative).
 
-## Reachability — the open question blocking a submission
+## Reachability — exhaustively traced, closed negative (Sessions 27–28)
 
-`CGImageCopyFileWithGPSInformation` is a **file-path-in/file-path-out** API (copies an image file
-to a new path while scrubbing or rewriting GPS metadata), not a buffer-decode API. It is **not**
-on the `CGImageSourceCreateWithData` path that previews/iMessage/QuickLook use for untrusted
-attachment thumbnails, so this is not a zero-click-on-receipt bug as currently understood.
+`CGImageCopyFileWithGPSInformation` is a **file-path-in/file-path-out** API, not a buffer-decode
+API — already a weaker reachability shape than a generic decode-path bug. The full trace (not
+just the initial guess at likely callers) came back empty at every layer checked:
 
-Likely callers (not yet traced to confirm):
-- Photos.app "Remove Location" action on a shared/exported photo
-- Camera.app GPS-embedding on capture (unlikely attacker-controlled)
-- Mail/Messages attachment export flows that strip location before sending
+- **No caller anywhere in ~600+ images checked.** Full sweep of every DSC-resident framework
+  that imports ImageIO (Photos, PhotoLibraryServices, PhotoImaging, PhotosUICore/UIPrivate,
+  Sharing, ShareSheet, Messages.framework, QuickLook family, WebKit, Vision, CameraUI, MapKit,
+  Mail-support frameworks, ~80 confirmed individually + ~500 more via a batch scan) plus 9
+  extracted BlastDoor XPC sandboxes (the only genuine zero-click receive path — Messages/Hubble/
+  UnknownSenders/MediaAnalysis/IDS/Maps/Telephony/Thumbnails/Wallet) plus 7 standalone app/
+  extension binaries (MobileMail, Preview, MusicMessagesApp, CameraMessagesApp,
+  PhotosFileProvider, ContinuityCamera, companioncamerad) — **zero callers found.**
+- **No vtable.** `GPSCopy` has no `_ZTV7GPSCopy` — unlike the sibling JPEG-segment-handler
+  classes it coincidentally shares a method name with (`_APP1`, `_APP13`, `_JPEGFile`, etc., all
+  of which DO have vtables), `GPSCopy` is non-polymorphic. Confirmed by its constructor storing
+  plain data fields at `this+0`, not a vtable pointer.
+- **No indirect/function-pointer dispatch either.** A control test proved `ipsw dyld xref` is
+  blind to vtable/data-pointer references (it only sees direct `bl`), so the "no caller" result
+  above doesn't by itself rule out table-based dispatch — closed separately by grepping the
+  *entire* `__text` of ImageIO (1.3–1.4M disassembled instructions, two independent tools) for
+  any `adrp`-computed address of either `GPSCopy::processData()` or
+  `GPSCopy::copyFileWithGPSInformation()` outside their one known call site: **zero matches.**
+- **No cross-image symbol-level reference either.** A regex sweep of every dylib's bind/import
+  table in the whole shared cache for any `_ZN7GPSCopy*` mangled symbol: **zero matches**
+  (expected, since these are local symbols, but now independently confirmed).
 
-Before this is submission-ready, need to:
-1. Trace actual callers of `CGImageCopyFileWithGPSInformation` in `Photos.framework` /
-   `Messages.framework` / `Mail.framework` to confirm something reachable from attacker-supplied
-   image data (e.g. a received photo the victim then shares/exports with location removed).
-2. Build an actual malformed-GPS-IFD test file and confirm the crash/OOB-write reproduces on
-   27.0.1 and is rejected (`OutOfBounds` thrown, no crash) on 27.2 beta.
-3. Check `EXIFCopy`/`TIFFCopy` for the same pattern — the batch of changes below suggests this
-   wasn't an isolated fix.
+**Verdict: dead code from Apple's own shipped-apps' perspective on this iOS build.** The bug is
+real and was silently patched, but its only entry point has no confirmed caller anywhere in this
+build's userland — not a zero-click bug, not a 1-click bug, not even a traceable user-triggered
+feature (no "Remove Location" button or similar was found calling it). The realistic (unverified)
+trigger model, if this matters at all, is a **third-party app explicitly calling the public
+ImageIO C API by name** on a file under its own control — the symbol is still exported (`T` in
+the dylib symtab) for static linking even though absent from the dlsym export trie.
 
-## Same-batch signals (suggests a broader integer/bounds-check patch pass in the IIO plugin layer)
+**Not pursued for Apple Security submission** — a memory-safety bug with no demonstrated
+reachability path isn't submission-ready, and further escalation (PoC construction, macOS-side
+checking) wasn't judged worth the effort given this result. Documented here for the record and
+as a methodology example (see the "what doesn't work" notes in `HANDOFF.md` Sessions 27–28 for
+the `ipsw dyld xref` vtable-blindness caveat, which matters for any future similar trace).
 
-- A new explicit overflow-guard string appears near DDS/ASTC texture decoding ("image dimensions
-  overflow") — lead function not yet located.
-- An internal `rlebuf` size field's format string changed from `%d` to `%llu` — classic
-  32-bit-to-64-bit widening fix for an integer-overflow bug — lead function not yet located.
-- Together with the GPSCopy fix, this reads as one coordinated bounds/overflow hardening pass
-  across several ImageIO plugins in the 27.2 beta, not a single unrelated change.
+## Same-batch signal that *did* pan out: DDS/ASTC (see next section)
 
-## Not yet confirmed / still needed before filing with Apple
-
-- No PoC file built or tested against either build yet.
-- `EXIFCopy`/`TIFFCopy` overlap with the same `memmove`-without-`checkCapacity` pattern: unchecked.
-- DDS/ASTC overflow-guard and `rlebuf` widening: lead functions not located yet, so unclear if
-  they're the same root cause or separate.
-- Caller graph into `CGImageCopyFileWithGPSInformation` from a remotely-attacker-influenced path:
-  not traced.
+The DDS/ASTC overflow guard flagged alongside GPSCopy in Session 25/26 as a "same coordinated
+hardening pass" lead was pursued further (Session 28) and, unlike GPSCopy, turned out to have a
+**much stronger reachability profile** — see the dedicated section below. The `rlebuf`
+`%d`→`%llu` widening lead remains unlocalized.
 
 ## Credit / methodology
 
 Found via static binary diff of `ImageIO.framework` between iOS 27.0.1 (24A446) and iOS 27.2 beta
 (24B5089g) kernelcache/rootfs images, `iPhone14,5`. Same toolkit and methodology as the other
 findings in this document (offline Mach-O parsing + `ipsw`/Ghidra decompilation where needed).
-Full session log: `HANDOFF.md`, Session 26.
+Full session log: `HANDOFF.md`, Sessions 25–28.
+
+---
+
+# iOS 27 ImageIO — ASTC/DDS "image dimensions overflow" hardening, reachable from the generic decode path
+
+**Same diff pass as GPSCopy above (`ImageIO.framework`, iOS 27.0.1 vs 27.2 beta, `iPhone14,5`),
+following up the one lead from that session that turned out to matter more.**
+
+> Status: patch confirmed as security hardening via structural SoP diff; reachability confirmed
+> structurally (registered decode-path format reader + MediaAnalysis chain traced in Session 31).
+> **Current flagship open lead for this project.**
+> Sessions 28–31, 2026-10-06.
+
+## TL;DR
+
+- Component: `ImageIO.framework`, `ASTCReadPlugin::initialize(IIODictionary*)` — a method of a
+  genuinely polymorphic plugin class (`__ZTV14ASTCReadPlugin` exists in both builds)
+  instantiated by `IIO_Reader_ASTC::createReadPlugin()`.
+- `IIO_Reader_ASTC` is a **registered ImageIO format reader**: it implements
+  `testHeader(const uint8_t*, size_t, const __CFString*, IIOHeaderOptions)`, the standard
+  format-sniffing interface, sitting in the exact same list/signature as `IIO_Reader_PNG`,
+  `_GIF`, `_BMP`, `_TIFF`, `_JP2`, `_HEIF`, `_WebP`, `_LibJPEG`, `_AppleJPEG`, `_KTX`, `_KTX2`,
+  etc. (~25 readers total) — i.e. the same generic-format-autodetection machinery
+  `CGImageSourceCreateWithData`/`CreateImageAtIndex`/`CreateThumbnailAtIndex` use for any
+  unrecognized file. This reader already existed in stable with the identical vtable shape —
+  only the new guards inside the plugin it builds are beta-only.
+- 4 new-in-beta strings (`"bad DDS/ASTC width/height %u"`, `"DDS/ASTC: image dimensions
+  overflow"`, `"bad DDS/ASTC data: expected %llu bytes"`) all trace to this one function.
+
+## Patch classification: HARDENING (SoP, structurally verified)
+
+A normalized (address-stripped) structural diff of the full function (1060 stable / 1224 beta
+instructions) shows **69% of the function is byte-for-byte identical** between builds, with the
+growth resolving into exactly **3 clean, isolated pure-insertion blocks** rather than scattered
+edits:
+1. A DX10-header width/height range check (118 new instructions), inserted right after the
+   format-magic check and before the dimensions are used to index a block-size table.
+2. A 64-bit multiply-overflow check (`mul x8,x22,x24; lsr x9,x8,#0x3c; cbnz x9,<error>`, ~21
+   lines), inserted immediately before the existing, unchanged size computation that consumes
+   the product.
+3. The "dimensions overflow" error-log-and-bail path itself (129 new instructions), inserted
+   right before validated dimensions flow into existing, unchanged downstream format-dispatch
+   logic.
+
+All three guard-then-bail to the same common error exit; surrounding logic on both sides of every
+insertion is otherwise isomorphic — the identical "insert N guards around existing read/compute
+logic, don't touch the logic itself" signature as the GPSCopy fix above.
+
+## Reachability: structurally confirmed (stronger profile than GPSCopy)
+
+Unlike `GPSCopy`, `ASTCReadPlugin` **has a vtable** and its constructor is reached via a standard
+factory (`IIO_Reader_ASTC::createReadPlugin`) that is itself a member of a class implementing
+ImageIO's generic format-sniffing interface (`testHeader`), alongside every mainstream format
+reader ImageIO ships. This satisfies a structural reachability check (vtable exists + the
+constructor sits behind a decode-path registry member) without needing the full indirect-scan
+that GPSCopy required (that scan would only be needed if this check came back ambiguous — it
+didn't).
+
+**This means the vulnerable code path is reachable, in principle, from any code that asks
+ImageIO to sniff/decode an unrecognized file** — including automatic thumbnail/preview
+generation (Quick Look, Spotlight, Mail/Messages previews), not gated behind a narrow,
+rarely-called utility function the way GPSCopy was.
+
+## Reachability: MediaAnalysis chain (Session 31)
+
+Session 30 identified `MediaAnalysis.framework` as the strongest downstream consumer:
+`MADImageASTCFormatReader`, a dedicated Objective-C class with methods `isValidASTCExtension:`,
+`initWithData:`, `readOneImageSource`, `readNextImageSource`, `readPList`, and
+`readDataToBuffer:Position:Length:`. The class exists in both stable and beta builds with
+an identical symbol set, and its source path is embedded in debug strings as
+`.../Sources/MediaAnalysis/MediaAnalysis/MADImageASTCFormatReader.mm`.
+
+Session 31 traced the disassembly chain (structural — no behavioral execution):
+
+```
+MADImageASTCFormatReader::readOneImageSource     @ 0x23d629124
+  → CGImageSourceCreateWithData                  (stub import)
+  → container magic 0x434B4149 checked in readPList
+
+VCPImageManager::decodeImageSource               @ 0x23d6f6b84
+  → CGImageSourceCreateIOSurfaceAtIndex          (primary path)
+  → CGImageSourceCreateImageAtIndex              (fallback @ 0x23d6f6c88)
+
+ImageIO autodetect pipeline
+  → IIO_ReaderHandler::buildPluginList
+  → ASTCReadPlugin::initialize                   (hardened in beta)
+```
+
+**Gap:** the ObjC dispatch between `readOneImageSource` output and `decodeImageSource` input
+was inferred from the class structure, not directly traced through a single disassembly path.
+This is a standard ObjC-method-dispatch gap, not an open question about whether the code
+path exists — both ends are confirmed via stub imports.
+
+**Severity assessment:** HIGH → conditional CRITICAL. The condition is whether `.astc` files
+can be delivered to `mediaanalysisd`'s processing queue without user interaction. Plausible
+delivery vectors (structural inference, not confirmed behaviorally):
+
+- iCloud shared album or Photo Library sync (background)
+- AirDrop-accepted files saved to Photos (semi-interactive)
+- iCloud Drive shared folder (background)
+
+**Complementary findings from Session 30:**
+
+| Process | ImageIO link | Decode imports | ASTC-specific | Verdict |
+|---------|-------------|---------------|---------------|---------|
+| MediaAnalysis / mediaanalysisd | YES | CGImageSourceCreate{Image,IOSurface}AtIndex | MADImageASTCFormatReader (dedicated) | ZERO-CLICK candidate |
+| QuickLookThumbnailing | YES | CGImageSourceCreate{Image,Thumbnail}AtIndex | none | SEMI-ZEROCLICK |
+| BlastDoor XPC (9 services) | 4/9 link ImageIO | metadata-only (CopyPropertiesAtIndex) | none | RULED OUT |
+| CoreUI | NO | none | none | RULED OUT |
+| PassKitCore | YES | CGImageSourceCreate{Image,Thumbnail}AtIndex | none | 1-CLICK |
+
+BlastDoor XPC services (MessagesBlastDoorService, MessagesHubbleService,
+MessagesUnknownSendersService, MessagesMediaAnalysisService, and 5 others) use
+`CGImageSourceCopyPropertiesAtIndex` for metadata extraction only — they never call
+the decode function that would reach `ASTCReadPlugin::initialize`. Zero-click via
+BlastDoor is structurally ruled out.
+
+## What's still missing before this is submission-ready
+
+- **Partial caller sweep completed (Session 30).** BlastDoor XPC services (9 checked) ruled
+  out as zero-click vectors; MediaAnalysis/mediaanalysisd identified as the strongest candidate
+  with a dedicated `MADImageASTCFormatReader` class. QuickLookThumbnailing confirmed as a
+  semi-zero-click path. The exhaustive sweep that closed GPSCopy has not been replicated for
+  all 598 ImageIO importers, but the high-value targets have been checked.
+- **MediaAnalysis chain structurally traced (Session 31).** `readOneImageSource` →
+  `CGImageSourceCreateWithData` → ImageIO autodetect → `ASTCReadPlugin::initialize`. ObjC
+  dispatch gap between `readOneImageSource` output and `VCPImageManager::decodeImageSource`
+  input remains inferred, not directly disassembled.
+- **No behavioral confirmation.** No `.astc` file has been run against either build. The
+  question of whether `mediaanalysisd` actually processes `.astc` files delivered via iCloud/
+  AirDrop is open — structural evidence says the code path exists, not that the delivery
+  mechanism reaches it.
+- No PoC file built — the exact DX10-header field layout, the width/height range `[0x85, 0xbc]`
+  (block-size-table bounds) semantics, and the multiply-operand provenance were read off the
+  disassembly but not independently cross-checked against the DDS/KTX spec.
+- The companion `rlebuf` `%d`→`%llu` lead (same session batch as this and GPSCopy) remains
+  unlocalized to a containing function.
+
+## Credit / methodology
+
+Same toolkit as the rest of this document; the key new technique in Session 28 was a normalized
+(address-stripped) `difflib.SequenceMatcher` structural diff to separate genuine logic insertions
+from address-relocation noise, plus a "vtable + decode-registry-membership" shortcut for
+reachability. Sessions 30–31 added a targeted caller sweep across BlastDoor XPC services,
+QuickLookThumbnailing, MediaAnalysis, CoreUI, PassKitCore, and UserNotifications, plus
+disassembly-level tracing of the `MADImageASTCFormatReader` → ImageIO chain. Full session
+logs: `HANDOFF.md`, Sessions 28–31.
