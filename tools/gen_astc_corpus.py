@@ -44,9 +44,43 @@ def emit(out, name, data):
         f.write(data)
 
 
+
+
+KTX_MAGIC = b"\xabKTX 11\xbb\r\n\x1a\n"
+IAKC_MAGIC = struct.pack("<I", 0x434B4149)  # bytes: IAKC
+
+
+def ktx_v2(width, height, vk_format=43, payload=b"\x00" * 32):
+    """Minimal KTX v2 header (80 bytes) + level data. vk_format 43 = COMPRESSED_ASTC_4x4."""
+    hdr = KTX_MAGIC
+    hdr += struct.pack("<I", vk_format)          # vkFormat
+    hdr += struct.pack("<I", 1)                  # typeSize
+    hdr += struct.pack("<3I", width, height, 1)  # pixelWidth/Height/Depth
+    hdr += struct.pack("<3I", 1, 1, 1)           # layerCount/faceCount/levelCount
+    hdr += struct.pack("<4I", 0, 0, 0, 0)        # supercompressionScheme etc.
+    hdr += b"\x00" * 32                          # dfd offset/size placeholders
+    return hdr + payload
+
+
+def iakc(n_images=2, plist=b"bplist00", payloads=None):
+    """Synthetic MediaAnalysis IAKC container: magic + plist + (offset,length) records."""
+    payloads = payloads or [b"\x5c\xa1\xab\x13" + b"\x06\x06\x01" + b"\x40" * 3 + b"\x00" * 16]
+    out = IAKC_MAGIC + plist
+    records = b""
+    body = b""
+    off = len(IAKC_MAGIC) + 40
+    for pl in payloads[:n_images]:
+        records += struct.pack("<QQ", off, len(pl))
+        body += pl
+        off += len(pl)
+    return IAKC_MAGIC + b"\x00" * 36 + records + body
+
+
 def main(outdir):
     os.makedirs(os.path.join(outdir, "astc"), exist_ok=True)
     os.makedirs(os.path.join(outdir, "dds"), exist_ok=True)
+    os.makedirs(os.path.join(outdir, "ktx"), exist_ok=True)
+    os.makedirs(os.path.join(outdir, "iakc"), exist_ok=True)
 
     BOUNDS = [0, 1, 3, 4, 12, 13, 0x84, 0x85, 0xBC, 0xBD, 0xFFFF, 0xFFFFFF]
 
@@ -99,6 +133,20 @@ def main(outdir):
     # legacy (non-DX10) DDS with extreme dims
     emit(outdir, "dds/legacy_maxdims.dds", dds(0xFFFFFFFF, 0xFFFFFFFF))
     emit(outdir, "dds/legacy_zero.dds", dds(0, 0))
+
+
+    # 6) KTX containers with ASTC payloads (PRIORITY: validator checks "ktx")
+    for fmt, name in [(43, "astc4x4"), (161, "astc6x6"), (162, "astc8x8"), (0xFFFFFFFF, "bogus")]:
+        emit(outdir, f"ktx/{name}.ktx", ktx_v2(0xBC, 0xBC, vk_format=fmt))
+        emit(outdir, f"ktx/{name}_wrap.ktx", ktx_v2(0xFFFFFF, 0xFFFFFF, vk_format=fmt))
+    emit(outdir, "ktx/ext_confusion.ktx", astc(6, 6, 1, 0xBC, 0xBC, 1))       # ASTC bytes, .ktx name
+    emit(outdir, "ktx/ext_confusion_inv.astc", ktx_v2(0xBC, 0xBC))            # KTX bytes, .astc name
+
+    # 7) Synthetic IAKC containers (MediaAnalysis format)
+    emit(outdir, "iakc/valid_2img.bin", iakc(2))
+    emit(outdir, "iakc/one_wrap.bin", iakc(1, payloads=[astc(6, 6, 1, 0xFFFFFF, 0xFFFFFF, 1)]))
+    emit(outdir, "iakc/bad_magic.bin", b"KAIC" + iakc(1)[4:])
+    emit(outdir, "iakc/zero_records.bin", iakc(1, payloads=[b""]))
 
     n = sum(len(files) for _, _, files in os.walk(outdir))
     print(f"emitted {n} files under {outdir}")

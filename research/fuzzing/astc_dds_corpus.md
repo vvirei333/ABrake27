@@ -92,3 +92,19 @@ trusting the corpus. All values below are *hypotheses to hit*, not confirmed sem
       advisories — if one matches, this "silent" patch is attributed, and the corpus should
       target the *pre-patch* shape of that CVE's PoC instead
 - [ ] KTX/KTX2 readers share the same registry — same sweep, lower priority
+
+---
+
+## 6. UPDATE 2026-11-04: KTX promoted from "skip" to PRIORITY
+
+`isValidASTCExtension:` (decompiled/disassembled, see research/intel/ma_decomp/) compares
+against **"ktx"**, not "astc". The MediaAnalysis reader consumes IAKC containers (magic
+0x434B4149) whose embedded payloads go to CGImageSourceCreateWithData → autodetect →
+ASTCReadPlugin::initialize. Corpus must now include:
+
+1. **KTX v1/v2 containers** (magic `«AB 4B »BB` / 0x«AB»4B«BB»2A) with ASTC payload
+   variations (the boundary/wrap sweeps of §3, nested inside KTX)
+2. **IAKC containers** (magic 0x434B4149 LE) — synthesized: plist header + per-image
+   (offset,length) records + embedded ASTC/KTX payloads; corrupt each header field
+3. **Extension-confusion set:** ASTC magic inside a `.ktx`-named file, KTX magic inside
+   `.astc`-named file — the validator gate and the magic sniffer disagree by design
