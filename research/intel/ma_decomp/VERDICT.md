@@ -103,3 +103,42 @@ decompression per-dylib first.
 
 **Verdict:** producer not yet located; delivery gate remains `.ktx`/IAKC-validated input
 into mediaanalysisd, whose upstream issuer is the next-session target.
+
+## 🔥 IAKC PRODUCER FOUND (2026-11-04, full decompress pass: 1440 dylibs scanned)
+
+movz/movk constant `0x434B4149` ("IAKC") sites:
+1. **MessagesBlastDoorSupport** @ 0x1c0bf70f8 — `bl(read 8B) → cmp x0,#8 → movz/movk IAKC → str w8,[sp] → add x2,sp → movz x3,#4 → bl(write/verify) → cmp x0,#4` — **WRITER pattern**
+2. **ChatKit** @ 0x193732b78 — header load → `cmp w8, IAKC → b.ne` — validator
+3. **ChatKit** @ 0x193a905b0 — same writer pattern as BlastDoorSupport
+
+**=> IAKC containers are built/validated in the iMessage attachment-analysis pipeline.**
+
+### Delivery chain (structurally grounded on 27.0.1 extraction)
+
+```
+iMessage attachment (zero-click ingress via BlastDoor)
+  → MessagesBlastDoorSupport / ChatKit: wrap/validate IAKC container
+  → mediaanalysisd (entitlement com.apple.messages.supportsAttachments,
+     Mach services com.apple.mediaanalysisd.*)
+  → VCPMediaAnalysisClientHandler::requestURLAssetAnalysis:...sandboxTokens:
+     → consumeSandboxExtension:url: → FigSandboxRegisterURLWithProcess
+  → MADImageASTCFormatReader (isValidASTCExtension: == "ktx")
+  → CGImageSourceCreateWithData → ImageIO autodetect → ASTCReadPlugin::initialize
+     (UNGUARDED dimensions math in 27.0.1, guarded in 27.2)
+```
+
+BlastDoor "ruled out" in Session 30 was premature: BlastDoor XPC services were ruled out
+for DIRECT ImageIO decode; the container path (BlastDoor → IAKC → mediaanalysisd) was not
+considered. Zero-click iMessage delivery to the ASTC parser is now a structurally complete
+chain — behavioral confirmation still required (no device).
+
+## CVE-2026-113915 (MediaAnalysis race) — race-candidate neighborhood (27.0.1)
+
+Decompiled 10 functions around sandbox-extension issuance/consumption
+(research/intel/ma_decomp/race_*.c). Key ingestion entrypoint:
+`VCPMediaAnalysisClientHandler::requestURLAssetAnalysis:forAssetWithResourcePaths:
+withOptions:analysisTypes:sandboxTokens:withReply:` — takes **client-supplied
+resourcePaths + sandboxTokens arrays**, consumes extensions, registers URLs with
+CoreMedia (`FigSandboxRegisterURLWithProcess`), validates "Sandbox token count (%lu)
+does not match resource count (%lu)". TOCTOU candidates: consume(extension)→register(URL)
+→read(asset) windows. Detailed race analysis = next session.
