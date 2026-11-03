@@ -52,6 +52,21 @@ Key structural facts (locked, Session 11):
 - [ ] Cross-check ASTC header field semantics against the spec (pure documentation).
 - [ ] Localize `rlebuf`: string → xref → function → diff 27.0.1 vs 27.2.
 
+### 2026-11-04 static verification update (fresh 27.0.1 extraction, see research/intel/ma_decomp/VERDICT.md)
+
+- Re-verified independently: `MADImageASTCFormatReader` + `readOneImageSource` →
+  `CGImageSourceCreateWithData` → autodetect chain (decompiled on our own extraction).
+- **Refinement:** `readPList` gates on container magic `0x434B4149` ("IAKC") —
+  mediaanalysisd consumes a **proprietary container with ASTC payloads embedded**,
+  not raw `.astc` files. Delivery model updated accordingly.
+- Blast radius: mediaanalysisd = mobile user, 80 entitlements (biome, cloudphotod,
+  contacts, iMessage DB, homekit), extension-based sandbox.
+- CVE-2026-112706 (sandbox escape, fixed 27.2): advisory + bytestream.xpc service +
+  FigXPC handshake verified on this build; document quarantined in research/intel/
+  with provenance (TG-forward, do not republish).
+- Open: `isValidASTCExtension:` imp, IAKC container producer, bytestream handler
+  subset binary.
+
 ## 5. Open threads from the SEP campaign (paused mid-way)
 
 These were parked when the diff campaign took priority (state reflects ~Session 21+):
@@ -74,7 +89,9 @@ These were parked when the diff campaign took priority (state reflects ~Session 
 > "jailbreak tools" already circulate around the CALIF demo. Verify writeups against
 > the researcher's own site/GitHub before treating them as prior art.
 
-## 7. Environment (for resuming)- Host: CachyOS (Arch), no Mac. Ghidra 12.1.2 + PyGhidra at `/opt/ghidra`; projects `amfi_stable` / `amfi_beta` (old path: `~/projects/iphone-lockdownd-fuzzer/ghidra_proj/`).
+## 7. Environment (for resuming)
+
+- Host: CachyOS (Arch), no Mac. Ghidra 12.1.2 + PyGhidra at `/opt/ghidra`; projects `amfi_stable` / `amfi_beta` (old path: `~/projects/iphone-lockdownd-fuzzer/ghidra_proj/`).
 - Kernelcaches: `kernelcaches/{stable,beta}/*/kernelcache.release.iPhone14,5` (MH_FILESET, symbols stripped, `LC_DYLD_CHAINED_FIXUPS` ARM64E — no `LC_SYMTAB`; `.a2s` = GOT stubs only).
 - Tools: `tools/macho_tool.py` (stdlib Mach-O parser + AArch64 decoder — weak on logical-immediates/complex loads, expect `???`), `tools/ghidra_*.py` headless scripts, `ipsw` (blacktop) + Ghidriff for diff passes.
 - Ghidra venv path and kernelcache paths in HANDOFF §Project Overview point at the **old** project directory (`iphone-ios27-diff`) — update when resuming.
