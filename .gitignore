@@ -36,3 +36,8 @@ __pycache__/
 id_rsa*
 .zsign_cache/
 **/.zsign_cache/
+
+ipsws/
+extracted_2701/
+corpus/
+tmp_ipsw/
