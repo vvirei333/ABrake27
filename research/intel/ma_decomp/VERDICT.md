@@ -83,3 +83,23 @@ pyghidra via `env -i … PYTHONPATH=<venv site-packages> GHIDRA_INSTALL_DIR=/opt
   sensitive user data", **race condition**, addressed with additional validation. Reporters
   include @eisw0lf / @Guluisacat. A race in mediaanalysisd is a different bug class than
   the ASTC guards — worth a dedicated diff/RE pass in the next session.
+
+## IAKC producer hunt (2026-11-04, session end)
+
+Searched for the 0x434B4149 constant (movz/movk pair + raw dword + cstring) in:
+- MediaAnalysis.framework: **only one site — the readPList validation cmp** (0x239b661b8). No writer.
+- mediaanalysisd / mediaanalysisd-service / assetsd (rootfs): none.
+- Cache dylibs extracted+scanned: PhotosFormats, PhotoLibraryServicesCore, CMPhoto,
+  MediaToolbox, PhotosImagingFoundation, SpotlightUI: none. PhotoLibraryServices not
+  extractable by that name (versioned image name — retry with exact name from `info -l`).
+- `photolod` does not exist under that name in this rootfs; photo daemons need a listing
+  pass (`root/usr/libexec` inventory) with correct names (photoanalysisd etc.).
+- Symbol tables contain no IAKC-named symbols; closest neighbor: `PhotoDecompressionContainer*`
+  selectors in MediaAnalysis — candidate producer family for the next pass.
+
+**Blocker learned:** iOS 27 subcache files store code pages compressed (only metadata
+readable by raw grep) — code-pattern hunts across the cache REQUIRE `ipsw dyld extract`
+decompression per-dylib first.
+
+**Verdict:** producer not yet located; delivery gate remains `.ktx`/IAKC-validated input
+into mediaanalysisd, whose upstream issuer is the next-session target.
