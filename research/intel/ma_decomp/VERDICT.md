@@ -142,3 +142,31 @@ resourcePaths + sandboxTokens arrays**, consumes extensions, registers URLs with
 CoreMedia (`FigSandboxRegisterURLWithProcess`), validates "Sandbox token count (%lu)
 does not match resource count (%lu)". TOCTOU candidates: consume(extension)→register(URL)
 →read(asset) windows. Detailed race analysis = next session.
+
+## CVE-2026-113915 race analysis — TOCTOU windows (27.0.1, static)
+
+### The gate (VCPMADServicePublicClientHandler::consumeSandboxExtension:url:)
+```
+T0:  sandbox_check_by_audit_token(client_audit_token, "file-read*")   // check CLIENT's CURRENT access to PATH
+T0': sandbox_extension_consume(token)                                  // daemon takes the capability for ITSELF
+T0'': FigSandboxRegisterURLWithProcess(path,1,1)                       // URL registered with CoreMedia
+T1:  analysis pipeline opens/reads the path                            // NO re-check (extension = process-wide capability)
+```
+Note: this is the **PUBLIC service** handler (`com.apple.mediaanalysisd.service.public`
+is Mach-reachable from apps). Ingestion loop pairs `resourcePaths[i]` with
+`sandboxTokens[i]` **by index only**; on any failure the loop aborts (fatal) — the
+consume/registration are gated, but the T0→T1 window is not.
+
+### Race hypothesis framework (needs device validation; no 27.2 beta binaries to diff)
+1. **Check-vs-read window:** client's read access validated at T0; daemon's open at T1
+   rides the consumed extension. Access/permission change between T0 and T1 persists.
+2. **Path swap (rename/symlink) race:** extension bound to a PATH, not inode — client
+   submits readable path Y at T0, swaps Y → sensitive target before T1 open. Fits the
+   advisory language exactly: race condition / "additional validation" added in 27.2
+   (plausibly inode-binding or re-stat at open).
+3. **Token↔path binding:** nothing in the ingestion loop validates that token[i] was
+   issued FOR path[i] — only index pairing + counts. If extensions are transferable
+   between legitimately obtained paths, checked-path ≠ capability-path is possible.
+
+Honesty: this is a static hypothesis framework consistent with the official advisory
+(race + sensitive data + additional validation), NOT a confirmed exploit primitive.
