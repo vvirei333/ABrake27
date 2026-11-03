@@ -1,6 +1,9 @@
 
 # iOS Kernelcache Reverse Engineering — Handoff
 
+> **📌 Current state, open threads, and next steps: see [STATUS.md](STATUS.md) — it is the authoritative summary.**
+> This file is the full chronological session journal (Sessions 1–31).
+
 > Last updated: Session 31 (2026-10-06)
 > Target: iPhone14,5 (iPhone 13, A15) / iOS 27.0.1 (24A446) and 27.2 (24B5089g)
 
