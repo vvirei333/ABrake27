@@ -60,9 +60,21 @@ These were parked when the diff campaign took priority (state reflects ~Session 
 - 12 all-zero selectors unswept; entitlement gating per table (t5 vs t7) unknown.
 - Offline symbol-naming sweep over all 124 entries (adrp+add → `__PRETTY_FUNCTION__` strings).
 
-## 6. Environment (for resuming)
+## 6. Watch-list (external events to fold into this plan)
 
-- Host: CachyOS (Arch), no Mac. Ghidra 12.1.2 + PyGhidra at `/opt/ghidra`; projects `amfi_stable` / `amfi_beta` (old path: `~/projects/iphone-lockdownd-fuzzer/ghidra_proj/`).
+| Event | Status | Impact on project |
+|-------|--------|-------------------|
+| **@pwnumbda (lambda) kernel R/W exploit + writeup** | Announced 2026-11-04, ETA ~1–2 weeks | First public post-exploit material for the iOS 27 generation — becomes prior-art item #1 for STATUS §4 and revises the conceptual chain ([4] EL1-writable patching, PPL wall) |
+| **«SPTM bypass exists» claim (TG chatter)** | **Unverified** — hearsay only | If confirmed by a published writeup, the PPL-wall assessment in §4 chain step [4]/[5] must be rewritten; treat as zero-information until then |
+| **Delayed-OTA window for 27.0.1 closes 2027-01-24** | Known (community) | Research reproducibility deadline: builds stay installable/relevant until then |
+| CALIF Hexacon materials (iOS 27.0.1 untethered) | Not published yet | Same as above; monitor calif.io/research |
+| CVE-2026-43818 / 65346 / 20634 advisories ↔ our ASTC guards | Cross-check pending binaries (§4 checklist) | May attribute our "silent" ImageIO hardening to a known CVE |
+
+> ⚠️ Hygiene note: no binaries/ipa from Telegram channels are to be run — scam
+> "jailbreak tools" already circulate around the CALIF demo. Verify writeups against
+> the researcher's own site/GitHub before treating them as prior art.
+
+## 7. Environment (for resuming)- Host: CachyOS (Arch), no Mac. Ghidra 12.1.2 + PyGhidra at `/opt/ghidra`; projects `amfi_stable` / `amfi_beta` (old path: `~/projects/iphone-lockdownd-fuzzer/ghidra_proj/`).
 - Kernelcaches: `kernelcaches/{stable,beta}/*/kernelcache.release.iPhone14,5` (MH_FILESET, symbols stripped, `LC_DYLD_CHAINED_FIXUPS` ARM64E — no `LC_SYMTAB`; `.a2s` = GOT stubs only).
 - Tools: `tools/macho_tool.py` (stdlib Mach-O parser + AArch64 decoder — weak on logical-immediates/complex loads, expect `???`), `tools/ghidra_*.py` headless scripts, `ipsw` (blacktop) + Ghidriff for diff passes.
 - Ghidra venv path and kernelcache paths in HANDOFF §Project Overview point at the **old** project directory (`iphone-ios27-diff`) — update when resuming.
