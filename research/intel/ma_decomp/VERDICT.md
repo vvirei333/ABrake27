@@ -71,3 +71,15 @@ pyghidra via `env -i … PYTHONPATH=<venv site-packages> GHIDRA_INSTALL_DIR=/opt
 - Consequence for the flagship lead: the delivery question narrows to
   **"does mediaanalysisd ever receive `.ktx` (or IAKC) files?"** — and the fuzz corpus
   should grow KTX-container fixtures (currently in the corpus doc as "skip").
+
+## CVE cross-check (2026-11-04, advisory support.apple.com/en-us/149230 = iOS 27.2)
+
+- 11 ImageIO CVEs in 27.2 (mostly OOB read/write, memory disclosure, 1 integer underflow
+  CVE-2026-112625, 1 buffer overflow CVE-2026-112488) — **no confident attribution** of our
+  three ASTC/DDS guard blocks to any listed CVE (advisory descriptions too vague to match
+  "DX10 dimension check + 64-bit mul-overflow + error path" precisely). Treat the hardening
+  as **silent unless** a future writeup attributes one of the OOB-write CVEs to ASTC/DDS.
+- **NEW adjacent lead: CVE-2026-113915 (MediaAnalysis)** — "An app may be able to access
+  sensitive user data", **race condition**, addressed with additional validation. Reporters
+  include @eisw0lf / @Guluisacat. A race in mediaanalysisd is a different bug class than
+  the ASTC guards — worth a dedicated diff/RE pass in the next session.
