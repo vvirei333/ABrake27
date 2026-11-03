@@ -44,3 +44,30 @@ Artifacts: `extracted_2701/`, decompiles in this dir (Ghidra headless / pyghidra
 pyghidra via `env -i … PYTHONPATH=<venv site-packages> GHIDRA_INSTALL_DIR=/opt/ghidra
 /usr/bin/python3` — the venv shims on this host resolve through a broken surrogate path
 (`Загр<b0>узки` AppImage dir) and intermittently lose their own site-packages.
+
+## 🔥 UPDATE (same session): `isValidASTCExtension:` disassembled from the dyld cache
+
+```asm
++[MADImageASTCFormatReader isValidASTCExtension:]  @ 0x239b65f90:
+  mov  x0, x2                    ; arg = candidate extension
+  adrp x2, 0x274bac000
+  add  x2, x2, #0xba8            ; -> cstring "ktx"   (VERIFIED, see below)
+  b   __objc_msgSend$isEqualToString:
+```
+
+- The tail-call target resolved to `objc_msgSend$x1=isEqualToString:` — chain complete.
+- **Resolver cross-check:** ipsw's cache-cstring resolver verified against known strings
+  of `readOneImageSource` ("[ %@] readOneImage: Already read out all images" — byte-exact
+  match with the Ghidra decompile of the extracted binary). Annotation trustworthy.
+- **FINDING: the ASTC reader's extension validator compares against `"ktx"`, not
+  `"astc"`.** No `"astc"` literal exists in the class or binaries at all.
+- Interpretation (two hypotheses, both delivery-relevant):
+  1. **Engineering intent:** the reader consumes KTX containers (Khronos texture format
+     that legitimately carries ASTC block-compressed data) — "ASTC" in the class name
+     refers to the texture payload, "ktx" to the outer format. Then the real delivery
+     gate for mediaanalysisd image analysis is **`.ktx` files**.
+  2. **Apple copy-paste bug:** validator intended to check "astc" and accepts ".ktx"
+     instead — either way, `.astc` is *not* what this validator admits.
+- Consequence for the flagship lead: the delivery question narrows to
+  **"does mediaanalysisd ever receive `.ktx` (or IAKC) files?"** — and the fuzz corpus
+  should grow KTX-container fixtures (currently in the corpus doc as "skip").
