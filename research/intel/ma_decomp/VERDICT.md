@@ -328,3 +328,16 @@ whitelist containing `.astc`/`.ktx` (pattern `ast.astc.ktx`, `hasAlpha` neighbor
 before mediaanalysisd. The question "does an attacker-supplied .ktx/.astc file reach
 the parser" remains purely behavioral (device test — behavioral kit prepared in
 research/behavioral_kit/).
+
+## KTX hypothesis verification (2026-11-04, session 3 cont.)
+
+- **ImageIO has full KTX support**: `IIO_Reader_KTX` (27 refs), `KTXReadPlugin`,
+  `KTXWritePlugin`, `KTX2ReadPlugin`, `KTX2WritePlugin`, `KTXorientation` key — both
+  KTX1 and KTX2 registered as generic format readers.
+- **Hypothesis 1 (engineering intent) STRENGTHENED**: MADImageASTCFormatReader's
+  "ktx" validator + ImageIO's registered KTX readers = the reader consumes KTX
+  containers whose payloads are ASTC block-compressed data. This is coherent design,
+  not a copy-paste bug: "ASTC" names the payload, "ktx" names the container.
+- `readDataToBuffer:Position:Length:` (decompiled): bounds-checked accessor
+  (position/length validated against container bounds before read) — defensive code,
+  not an attack surface. Confirms MediaAnalysis reads container payload bytes verbatim.
