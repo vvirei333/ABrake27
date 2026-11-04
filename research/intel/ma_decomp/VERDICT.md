@@ -194,3 +194,32 @@ ASTCReadPlugin::initialize (unguarded in 27.0.1).
 this format and the BlastDoor→mediaanalysisd delivery chain are, to our knowledge,
 first publicly documented here. Open verification question: whether attacker-supplied
 ASTC frames persist verbatim through finalizeASTC (imageProvider = transcode-or-copy?).
+
+## Verbatim-persistence analysis (2026-11-04, session 2 — the 80% question)
+
+**Structural verdict: the transcode question is largely MOOT for the delivery chain.**
+
+Key insight: mediaanalysisd's input is a **file PATH** (client-supplied resourcePaths +
+sandboxTokens), not a transcoded copy. `MADImageASTCFormatReader::initWithData:` reads
+the file bytes as-is → readPList (IAKC gate) → readOneImageSource slices frames →
+CGImageSourceCreateWithData on raw frame bytes. **No transcode stage exists inside
+mediaanalysisd.**
+
+The parse/persist side (BlastDoor/ChatKit) reads incoming ASTC-based files via
+`multiFrameImageWithASTCData:` (raw ASTC data in, length-gated at >0x13 bytes) and
+persists via `_writeASTCImagesWithCount:...` — for already-ASTC sources this is
+parse-and-rewrap, not re-encode (encode branch applies to non-ASTC sources being
+converted into ASTC textures — that's the *purpose* of ASTC_Persistence). Caveat:
+the encode-vs-copy branch inside the writer was not fully traced; noted as open.
+
+**Net:** if an attachment file arrives already in ASTC/IAKC/KTX form, its payload bytes
+reach `ASTCReadPlugin::initialize` verbatim on the mediaanalysisd side. The remaining
+unknowns are behavioral, not structural: (1) does any upstream stage reject .ktx/.astc
+attachments before the file is stored/analyzed, (2) does the sticker pipeline actually
+invoke mediaanalysisd on such files (trigger conditions), (3) the writer's encode-vs-copy
+branch.
+
+## Reader confirmed raw-input
+`+[CKMultiFrameImage(ASTC_Persistence) multiFrameImageWithASTCData:error:]` takes raw
+data, gates length (≤0x13 → error), category log handle "CKMultiFrameImage" — direct
+untrusted-bytes parser in the Messages stack.
