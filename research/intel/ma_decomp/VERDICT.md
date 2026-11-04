@@ -223,3 +223,20 @@ branch.
 `+[CKMultiFrameImage(ASTC_Persistence) multiFrameImageWithASTCData:error:]` takes raw
 data, gates length (≤0x13 → error), category log handle "CKMultiFrameImage" — direct
 untrusted-bytes parser in the Messages stack.
+
+## Writer branch resolved (2026-11-04, session 2 cont.)
+
+`_writeASTCImagesWithCount:...` uses **CGImageDestinationAddImage → CGImageDestinationFinalize**
+with `_kCGImagePropertyASTCEncoder` properties — the persisted IAKC copy in BlastDoor is
+**re-encoded through ImageIO's ASTC encoder**, not a verbatim copy (no
+CGImageDestinationCopyImageSource passthrough observed).
+
+**Impact on delivery chain: contained, not fatal.** The transcoded copy is BlastDoor's
+rendering artifact. The mediaanalysisd ingestion is path-based (client-supplied
+resourcePaths) — if the pipeline submits the ORIGINAL attachment file, the parser reads
+attacker bytes directly regardless of the transcoded copy. What remains open (behavioral):
+which path is actually submitted for sticker/animated attachments — original vs
+transcoded artifact — and whether any upstream stage normalizes/rejects ASTC-family files.
+
+Scanned: full writer function head (provider blocks, property dicts, NSMutableArray/
+NSMutableData assembly, CGImageDestination path).
