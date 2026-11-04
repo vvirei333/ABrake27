@@ -240,3 +240,18 @@ transcoded artifact — and whether any upstream stage normalizes/rejects ASTC-f
 
 Scanned: full writer function head (provider blocks, property dicts, NSMutableArray/
 NSMutableData assembly, CGImageDestination path).
+
+## Wallpaper-upgrade path (2026-11-04, session 2 cont.)
+
+`requestWallpaperUpgrade:atSourceURL:toDestinationURL:withOptions:sandboxTokens:andReply:`
+- Validates **exactly 2 tokens** ("Sandbox token count not equal to 2") — source + destination
+- Consumes via the shared helper (FUN_10021e0e0 = audit-token "file-read*" check +
+  extension_consume — same gate as ingestion)
+- `VCPParallaxAnalyzer` analyzes the SOURCE (image parse — same parser surface as the
+  asset-analysis path), upgrade writes to DESTINATION (client-supplied path + token)
+
+**Verdict: same race family as the asset-analysis path, no new primitive class.**
+Source = read-side TOCTOU (swap before analyze); destination = write bounded by the
+consumed token's baked path. Confirms the index-pairing design is systemic across
+the MAClientHandler entrypoints. Statics on the mediaanalysisd surface: exhausted —
+remaining work is behavioral (PoC + device).
