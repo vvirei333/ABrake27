@@ -269,3 +269,48 @@ remaining work is behavioral (PoC + device).
   security question is whether the ALLOCATION uses a truncated (int) size while the
   subsequent read uses the full 64-bit size** — classic PSD heap overflow pattern.
   Function decompile will settle it.
+
+## rlebuf VERDICT (2026-11-04, session 3 — llvm-objdump clean disasm)
+
+The `rlebuf`/`rowbuf`/`fullbuf` strings belong to **PSDWritePlugin::writeOne** (psd.c
+writer, not reader!) — `PSDWritePlugin::writeLayerMaskBlock8bit/16bit` call sites at
+0x187b65118/0x187b6513c confirm context (IIOImageWriteSession, layer mask blocks).
+
+**THE FINDING — asymmetric overflow checking between depth paths** in writeOne:
+
+```
+; 16-bit depth path (0x187b65168): PROTECTED
+187b65168:  mul  x8, x21, x28          ; 64-bit multiply
+187b6516c:  mul  x8, x8, x9
+187b65170:  lsr  x25, x8, #3
+187b65174:  b    0x187b65224           ; → umulh overflow-check path below
+
+; 8-bit depth path (0x187b65178): ⚠️ 32-BIT, NO CHECK
+187b65178:  mul  w8, w10, w21          ; 32-bit truncated multiply
+187b6517c:  lsl  w0, w8, #1            ; rlebuf size = (uint)(w10*w21)*2
+187b65188:  add  x8, x28, #0x7f        ; width + 127
+187b6519c:  umulh x9, x8, magic        ; division-by-127 trick (compiler)
+187b651a8:  add  x8, x28, x8, lsr #6   ; x8 = width + width/127 (RLE worst case/row)
+187b651ac:  mul  x25, x8, x21          ; 64-bit
+187b651c8:  bl   0x188138470           ; ALLOC gets 32-bit truncated w0
+; success → joins shared path:
+187b65224:  umulh x8, x10, x25         ; overflow check (64-bit)
+187b6522c:  b.ne → bail
+187b65230:  mul  x20, x10, x25         ; full 64-bit size for write loop
+```
+
+- The **16-bit path overflow-checks before allocating**; the **8-bit path allocates with
+  a 32-bit truncated product and no umulh check**.
+- LogDebug line constant 0x6c9 (psd.c line 1737) matches the Session 25 `%d`→`%llu`
+  observation — Apple touched this exact region in 27.2.
+
+**Security assessment (honest):**
+- This is the PSD **WRITE** path — triggered when an app exports/saves PSD, not on
+  untrusted file parse. Attacker would need controlled huge dimensions flowing into a
+  PSD export (narrower than read-path delivery, but real if reachable: crafted source
+  image with metadata dimensions > 2^31/channels → truncated rlebuf → OOB write during
+  RLE encode loop that uses 64-bit x20).
+- The `%d` vs `%llu` string change alone is cosmetic; the asymmetric check is the
+  substance. Beta 27.2 binary needed to confirm what Apple actually fixed.
+- Severity: LOW-to-MEDIUM conditional (write-path reachable, dimension source
+  attacker-controlled only in specific app flows).
