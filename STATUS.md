@@ -122,3 +122,10 @@ These were parked when the diff campaign took priority (state reflects ~Session 
 - Kernelcaches: `kernelcaches/{stable,beta}/*/kernelcache.release.iPhone14,5` (MH_FILESET, symbols stripped, `LC_DYLD_CHAINED_FIXUPS` ARM64E — no `LC_SYMTAB`; `.a2s` = GOT stubs only).
 - Tools: `tools/macho_tool.py` (stdlib Mach-O parser + AArch64 decoder — weak on logical-immediates/complex loads, expect `???`), `tools/ghidra_*.py` headless scripts, `ipsw` (blacktop) + Ghidriff for diff passes.
 - Ghidra venv path and kernelcache paths in HANDOFF §Project Overview point at the **old** project directory (`iphone-ios27-diff`) — update when resuming.
+
+## 8. Prior art & related work (2026-11-04)
+
+| Repo | Relevance |
+|------|-----------|
+| [AzozzALFiras/iOS-Research](https://github.com/AzozzALFiras/iOS-Research) | Independent researcher on the SAME builds (27.0.1/27.2/27.3, iPhone 17,2), same pipeline (IPSW → Ghidra → patch-diffs). Independently confirms 27.0.1 predates the 27.2 media-parser fixes (corroborates our silent-guard finding). Their media-parsers audit covers HEIF/ISOBMFF (CMPhoto/MediaToolbox) + libheif/webp/avif fuzzing — **ASTC, PSD, KTX, IAKC NOT covered** → our flagship lead is not duplicated. Their "surface saturated" verdict applies to the ISOBMFF surface only. Useful: SPTM version tracking (820.0.22 → 820.60.12), TXM byte-identical. |
+| [dawgyg/AppleResearch](https://github.com/dawgyg/AppleResearch/tree/main/agent_guidance) | AI-agent RE methodology (`CODEX_DEEP_RE_RULES.md`): **Rule Zero "bounds ≠ ok, verify BOTH sides"** — find the gap between validation and sink; bug classes include "one operand checked while a sibling is unchecked" (exactly our rlebuf finding); closure-table verification standard (no "looks bounded" verdicts — exact cmp/umulh vaddrs required). Adopted for our verdicts. |
