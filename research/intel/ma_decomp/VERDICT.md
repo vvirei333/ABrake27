@@ -170,3 +170,27 @@ consume/registration are gated, but the T0→T1 window is not.
 
 Honesty: this is a static hypothesis framework consistent with the official advisory
 (race + sensitive data + additional validation), NOT a confirmed exploit primitive.
+
+## 💎 IAKC FORMAT SEMANTICS RESOLVED (2026-11-04, session 2)
+
+Function identification via cache disassembly:
+- `-[IMMultiFrameImage(ASTC_Persistence) finalizeASTCWithError:]` (MessagesBlastDoorSupport,
+  contains the IAKC writer site @ 0x1c0bf70f8; neighboring string "CKAnimatedImageScale")
+- `+[CKMultiFrameImage(ASTC_Persistence) multiFrameImageWithASTCData:error:]` (ChatKit,
+  validator site @ 0x193732b78 — reads IAKC container)
+- `+[CKMultiFrameImage(ASTC_Persistence) _writeASTCImagesWithCount:imageProvider:durations:
+  toOutputStream:error:]` (ChatKit, writer site @ 0x193a905b0 — frames+durations to stream)
+
+**IAKC = the persistence stream of iMessage multi-frame ASTC images (animated stickers):**
+magic "IAKC" + plist (durations, CKAnimatedImageScale, metadata — matches readPList's
+0x434B4149 gate + plist parsing) + N per-frame (offset,length) records (matches
+readOneImageSource's slicing) + ASTC frame payloads (reach CGImageSource → ASTCReadPlugin).
+
+Pipeline: incoming animated sticker → BlastDoor (IMMultiFrameImage finalizeASTC) →
+IAKC persisted → mediaanalysisd analyzes frames via MADImageASTCFormatReader →
+ASTCReadPlugin::initialize (unguarded in 27.0.1).
+
+**Novelty check:** public search for "IAKC" container documentation returns nothing —
+this format and the BlastDoor→mediaanalysisd delivery chain are, to our knowledge,
+first publicly documented here. Open verification question: whether attacker-supplied
+ASTC frames persist verbatim through finalizeASTC (imageProvider = transcode-or-copy?).
