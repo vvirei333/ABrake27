@@ -52,6 +52,33 @@ Key structural facts (locked, Session 11):
 - [ ] Cross-check ASTC header field semantics against the spec (pure documentation).
 - [ ] Localize `rlebuf`: string → xref → function → diff 27.0.1 vs 27.2.
 
+### 2026-11-04 session 2 — delivery chain resolved (see research/intel/ma_decomp/VERDICT.md, latter half)
+
+- **IAKC format documented (novelty: no public documentation found — first public description).**
+  Magic 0x434B4149 + plist (durations, `CKAnimatedImageScale`) + N per-frame
+  (offset,length) records + ASTC frame payloads.
+- **Producer identified:** `-[IMMultiFrameImage(ASTC_Persistence) finalizeASTCWithError:]`
+  (MessagesBlastDoorSupport) writes IAKC; `+[CKMultiFrameImage(ASTC_Persistence)
+  multiFrameImageWithASTCData:error:]` / `_writeASTCImagesWithCount:...` (ChatKit)
+  read/write. **IAKC = persistence stream of iMessage multi-frame ASTC stickers.**
+- **Zero-click iMessage delivery chain structurally grounded:** message attachment →
+  BlastDoor → IAKC → mediaanalysisd (`com.apple.messages.supportsAttachments`) →
+  MADImageASTCFormatReader (validator = **"ktx"**, not "astc") → CGImageSource →
+  ASTCReadPlugin::initialize (unguarded in 27.0.1 per original diff). Session 30's
+  "BlastDoor ruled out" was premature — container path was not considered.
+- **Verbatim-persistence moot:** mediaanalysisd reads the raw attachment file by path
+  (client-supplied resourcePaths) — no transcode stage. BlastDoor's persisted copy IS
+  re-encoded (`CGImageDestinationAddImage` + `kCGImagePropertyASTCEncoder`), but that is
+  a rendering artifact, not the ingestion input.
+- **CVE-2026-113915 race framework:** ingestion `requestURLAssetAnalysis:...sandboxTokens:`
+  + wallpaper-upgrade path share the same TOCTOU family (audit-token check @T0 vs
+  analysis-read @T1; index-pairing of resourcePaths↔sandboxTokens; path-bound extensions
+  vs inode swap). 10 functions decompiled (`race_*.c`).
+- **Static analysis of the mediaanalysisd surface is exhausted.** Remaining work is
+  behavioral: upstream filter check for .ktx/.astc attachments, trigger conditions,
+  PoC reproduction on device (corpus ready: 101 files, `tools/gen_astc_corpus.py`).
+- All commits pushed to origin/main.
+
 ### 2026-11-04 static verification update (fresh 27.0.1 extraction, see research/intel/ma_decomp/VERDICT.md)
 
 - Re-verified independently: `MADImageASTCFormatReader` + `readOneImageSource` →

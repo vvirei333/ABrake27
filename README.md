@@ -9,7 +9,7 @@
 
 > **Research-grade, documentation-first project.** Binary diff of iOS 27.0.1 (24A446) vs 27.2 beta (24B5089g) on iPhone14,5, reverse-engineering the AMFI and AppleSEPUserClient `IOUserClient` dispatch surfaces, and a fully verified, reproducible **Developer Mode enablement path through Apple's stock lockdown protocol** — all done from Linux, no Mac, no Xcode.
 >
-> **Flagship open lead:** silent ASTC/DDS hardening in ImageIO, structurally reachable from the generic decode path via MediaAnalysis — see [STATUS.md](STATUS.md).
+> **Flagship open lead:** silent ASTC/DDS hardening in ImageIO with the delivery chain mapped — iMessage attachment → BlastDoor → IAKC container (first public documentation of the format) → mediaanalysisd → ASTC parser. See [STATUS.md](STATUS.md) and [research/intel/ma_decomp/VERDICT.md](research/intel/ma_decomp/VERDICT.md).
 
 ## Status
 
@@ -102,7 +102,8 @@ cd poc && IOS_SDK=/path/to/iPhoneOS.sdk ./build_ipa.sh   # → EnableAMFIDevMode
 | CVE-2025-43520 TOCTOU hypothesis | ❌ **Closed — false** | Session 15: key addresses misidentified heuristically |
 | GPSCopy OOB write (ImageIO) | ❌ **Closed — unreachable** | Real bug, silently patched, but zero callers in shipped userland |
 | SpringBoard SBIconStateArchiver | ❌ Closed — robustness fix | New code written defensively; not type confusion |
-| **ImageIO ASTC/DDS hardening** | 🔶 **OPEN — flagship** | Structurally reachable via MediaAnalysis; severity HIGH, conditional CRITICAL pending behavioral confirmation |
+| **ImageIO ASTC/DDS hardening** | 🔶 **OPEN — flagship** | **Delivery chain mapped 2026-11-04**: iMessage attachment → BlastDoor → IAKC container (first public documentation of the format) → mediaanalysisd → ASTC parser; zero-click iMessage candidate. Severity HIGH, conditional CRITICAL pending behavioral confirmation |
+| CVE-2026-113915 race framework (MediaAnalysis) | 🔶 OPEN — new lead 2026-11-04 | TOCTOU windows mapped statically (audit-token check vs analysis-read, index-paired sandboxTokens); decompiles in `research/intel/ma_decomp/race_*.c` |
 | `rlebuf` format-string lead | 🔶 OPEN — unlocalized | See WRITEUP Session 25 |
 
 Details in **[WRITEUP.md](WRITEUP.md)**.
