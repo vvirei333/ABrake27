@@ -255,3 +255,17 @@ Source = read-side TOCTOU (swap before analyze); destination = write bounded by 
 consumed token's baked path. Confirms the index-pairing design is systemic across
 the MAClientHandler entrypoints. Statics on the mediaanalysisd surface: exhausted —
 remaining work is behavioral (PoC + device).
+
+## rlebuf localization progress (2026-11-04, session 3)
+
+- String found: `ImageIO.framework`, VA `0x187eae4e8` — error family from the **PSD
+  read plugin**: "could not allocate rowbuf/rlebuf/fullbuf/iptcData - size=%d" +
+  "could not allocate iptcData - size=%d" (classic psd.c RLE decoder strings).
+- Direct adrp+add scan found no xref (string may be referenced via pointer table /
+  chained fixup) → Ghidra headless analysis of the extracted ImageIO binary running
+  in background to locate the containing function and decompile it.
+- Hypothesis to verify: Session 25 flagged a `%d`→`%llu` change in this string between
+  builds. If stable passes `size_t` to a `%d` variadic log — cosmetic-only. **The
+  security question is whether the ALLOCATION uses a truncated (int) size while the
+  subsequent read uses the full 64-bit size** — classic PSD heap overflow pattern.
+  Function decompile will settle it.
