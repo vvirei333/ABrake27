@@ -314,3 +314,17 @@ writer, not reader!) — `PSDWritePlugin::writeLayerMaskBlock8bit/16bit` call si
   substance. Beta 27.2 binary needed to confirm what Apple actually fixed.
 - Severity: LOW-to-MEDIUM conditional (write-path reachable, dimension source
   attacker-controlled only in specific app flows).
+
+## Upstream extension-filter search (2026-11-04, session 3) — NEGATIVE
+
+Searched 1728 decompressed dylibs + extracted rootfs for an attachment extension
+whitelist containing `.astc`/`.ktx` (pattern `ast.astc.ktx`, `hasAlpha` neighborhoods):
+- `ast.astc.ktx` raw cache hit traced to a GLSL/shader-identifier neighborhood
+  (`DOMAIN_MIN`, shader constants) — NOT an attachment filter.
+- `hasAlphaChannel` in CoreSpotlight = Spotlight metadata attribute list, unrelated.
+- No explicit `.astc`/`.ktx` allow-list found in any extracted binary.
+
+**Conclusion:** no static evidence of an upstream stage that whitelists image extensions
+before mediaanalysisd. The question "does an attacker-supplied .ktx/.astc file reach
+the parser" remains purely behavioral (device test — behavioral kit prepared in
+research/behavioral_kit/).
