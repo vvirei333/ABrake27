@@ -611,3 +611,31 @@ is not in the race set. mediaanalysisd-generation: launcher __text identical
 Method note (reusable): single 4-gram anchors drift silently — always require
 multi-offset consensus (≥3 of 5 windows voting for the same delta) before
 trusting a window alignment.
+
+## PROBE v5 ON "iPhone 12 Pro 27.0.1" — ENVIRONMENT IS A RESEARCH VM, NOT A DEVICE (2026-11-05)
+
+RECON unmasked it in one screen:
+```
+kern.version  = Darwin Kernel Version 25.4.0 ... root:xnu-12377.100.591.502.1~2/RELEASE_ARM64_VRESEARCH1
+hw.machine    = iPhone99,11
+hw.model      = VPHONE600AP
+kern.osversion= 23E246
+```
+- `iPhone99,11` / `VPHONE600AP` / `ARM64_VRESEARCH1` = virtualized research
+  platform (Corellium-style hypervisor VM), not physical Apple silicon.
+- `Darwin 25.4.0 / xnu-12377` = iOS 26-generation kernel, and `23E246` is an
+  18.4-era build number — **no iOS 27.0.1 anywhere in this environment**.
+- All 18 SPTM/Exclaves/TLBI sysctl guesses: absent (expected, and now verified
+  — also on a VM kernel).
+- All 15 ATX fixtures survived — **invalid as a negative for the third time**;
+  the 27.0.1 ImageIO code under test is not present in the VM's image.
+
+**Campaign rule (hardened):** every future device round MUST run RECON first
+and paste `kern.version` + `hw.machine` before any fixture run. Real-device
+fingerprints: `hw.machine` in {iPhone14,5 (13), iPhone13,3 (12 Pro)}, xnu-13432.x
+for 27.x, no VRESEARCH/VPHONE strings. VM negatives are not evidence about
+27.0.1 — do not spend contact goodwill on them.
+
+Project status: the on-device confirmation loop is blocked on access to REAL
+hardware running iOS 27.0.x. Static side remains exhausted-and-consistent;
+delayedOTA window to 24A446 closes 2027-01-24.
