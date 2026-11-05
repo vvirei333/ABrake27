@@ -91,3 +91,40 @@ directives confuse the decoder), so adrp+add xref hunting for the AMFI strings
 does not resolve in this dis. Kernel v2 proper needs a Mach-O-aware pass:
 `ipsw macho disass` per-kext, or Ghidra with the AMFI kext sliced out
 (kext boundaries come from `__PRELINK_INFO`). Queued.
+
+### v2 PROPER: AMFI kext diff — DER fallback fully characterized
+
+Extracted both AMFI kexts from the fileset (`ipsw kernel extract --all`,
+`com.apple.driver.AppleMobileFileIntegrity`, 298KB each) and diffed cleanly:
+**identity 0.9997, exactly 2 change clusters** (the kext is otherwise untouched).
+
+**New function added in 27.2** (27.2 VA 0xfffffff008ed03e0; nothing at the
+corresponding spot in 27.0.1):
+```
+entitlement_probe(cred):
+    err = parse_legacy_entitlements(cred, &len, &ptr)        // 0x…8ef135c
+    if (err)  log("AMFI: Entitlement extraction failure in no entitlement check.")
+    else if (len == 0 && ptr == 0) {
+        err2 = parse_DER_entitlements(cred, &len2, &ptr2)    // 0x…8ef134c  ← NEW CALL
+        if (err2)   log("AMFI: DER entitlement extraction failure in no entitlement check.")
+        else if (len2 || ptr2)
+                    log("AMFI: DER entitlements present in no entitlement check. (length, ptr)")
+    }
+    else      log("AMFI: Entitlements present in no entitlement check. (length, ptr)")
+    return same_gate_result_as_27.0.1
+```
+Key facts (from the instruction stream):
+- The DER parse runs **only when the legacy entitlement blob is empty** — it is a
+  fallback probe, not a replacement.
+- **The gate's return value is unchanged** in every path (0/1 exactly as in
+  27.0.1) — this is pure *observation/telemetry*: Apple is instrumenting how
+  often code carrying DER-encoded entitlements flows through paths that skip
+  entitlement validation. Classic "measure first, enforce later" pattern;
+  watch for this becoming a hard gate in a future release.
+- Second cluster (2 insns @0x…8ea15a0): a constant loaded via `ldr d0` from
+  `__DATA_CONST` differs — table/constant tweak in the codesign-flags check
+  (`movk w8, #0xefff` mask region), cosmetic.
+
+Method note: whole-kext normalized diff (44.5k insns, identity 0.9997) resolves
+what the whole-kernel 120MB dis could not — per-kext extraction is the right
+kernel v2 technique; kernel-wide llvm-objdump stays unusable for PRELINK_TEXT.
