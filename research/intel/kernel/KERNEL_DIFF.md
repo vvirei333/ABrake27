@@ -174,3 +174,34 @@ stays "fix-claim unverified", with a sharper pointer.
 Whole-kext sweep (byte map) → pick changed kexts → normalized dis diff +
 string attribution. Reusable; next candidates: com.apple.kernel (+16424,
 innermost), AppleT8110DART (+24), corecrypto (+16).
+
+## v3b: com.apple.kernel deep-dive (2026-11-05)
+
+Full 2.2M-insn dis of both kernels' innermost kext (12.1MB); full SequenceMatcher
+out of scope, targeted xref analysis of the new assert strings instead.
+
+New in 27.2 (string-set diff of the kext, +350/-293):
+1. **`VM entry %p lock shared lock overflow <v:%d c:%c%c w:%c%c %c/%d>`** —
+   xref'd to code @0xfffffff00aa7a764 (boot region), inside a VM-map locking
+   function using `TPIDR_EL1` per-cpu state and `ldxr/ldadd` atomics with the
+   `#0x40000` overflow flag on the lock word. → **new instrumentation for
+   shared-lock overflow on vm_map_entry** — the classic lck_rw overflow panic
+   class now has a dedicated diagnostic path. Defensive read: Apple is chasing
+   a lock-contention/overflow condition that at minimum caused field panics,
+   at worst was a DoS lead.
+2. `vm: configured segment limit would overflow slot mapping index, reducing to %d`
+   — new defensive clamp in VM segment configuration (integer-overflow guard
+   on slot-mapping index).
+3. `memsize=%u MB leaves no memory for XNU/SPTM to manage: the iBoot carveouts
+   alone are %llu MB` — new boot-time consistency check in the XNU↔SPTM memory
+   handoff (ties into the SPTM hibernation rework).
+4. `_exclaves_indicator_system_state_change` — new Exclaves state-change
+   indicator surface (matches the framework-side growth seen in v1).
+5. Removed: `memorystatus: swap is disabled, bypassing fast-wake warmup`
+   (fast-wake warmup path changed).
+6. Same panic-adjacent and OSLog source-path churn (new xbs build root
+   FBE73862…) — consistent with ~40 xnu point-release iterations.
+
+No new gate/entitlement strings in the innermost kernel; the 27.2 security
+delta concentrates in VM-lock diagnostics + boot consistency checks, which
+complements (not changes) the sandbox-kext conclusion from v3.
