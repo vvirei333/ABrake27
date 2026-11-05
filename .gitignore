@@ -41,3 +41,8 @@ ipsws/
 extracted_2701/
 corpus/
 tmp_ipsw/
+poc/probe_app/build/
+
+# Kernel/SPTM research artifacts (hundreds of MB — local only)
+kernel_diff/
+sptm_research/

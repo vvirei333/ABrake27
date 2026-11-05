@@ -94,6 +94,20 @@ Key structural facts (locked, Session 11):
 - Open: `isValidASTCExtension:` imp, IAKC container producer, bytestream handler
   subset binary.
 
+### 2026-11-05 — probe v4 telemetry + watermark decoded (VERDICT.md)
+
+- Probe v4 ran on-device: **all 15 ATX fixtures survived — but the device was
+  26.6.1 RC (iPhone 13), NOT iOS 27.** Negative result is invalid as evidence:
+  the 27.0.1 ATX/ASTC code under test was never reached. Any further probe run
+  requires an iOS 27.0.x device (delayedOTA window to 24A446 open until
+  2027-01-24).
+- Watermark check fully decoded **statically** (table `DAT_187dbfb20` dumped from
+  27.0.1 ImageIO = weights `01 02 04 08 10 20 40 80` ×2): mask_i = (wm[i]=='U')
+  ? 1<<(i%8) : 0, popcount-fold → reject if <4 or ==16. **`allU` (0x55×16) and
+  `altU` pass under both slice models** — the v4 fixture set was already correct.
+- ASTC trigger chain is now fully statically characterized end-to-end; only the
+  on-device confirmation on 27.0.x remains.
+
 ## 5. Open threads from the SEP campaign (paused mid-way)
 
 These were parked when the diff campaign took priority (state reflects ~Session 21+):

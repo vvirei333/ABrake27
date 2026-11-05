@@ -341,3 +341,273 @@ research/behavioral_kit/).
 - `readDataToBuffer:Position:Length:` (decompiled): bounds-checked accessor
   (position/length validated against container bounds before read) — defensive code,
   not an attack surface. Confirms MediaAnalysis reads container payload bytes verbatim.
+
+## 🔥 27.2 FINAL (24B119) DIFF — both findings VERIFIED (2026-11-04, session 4)
+
+Extracted 27.2 final (24B119, signed) from ipsw.me — real release binaries, not beta.
+Tool: `tools/diff_function.py` (LC_SYMTAB lookup + normalized SequenceMatcher).
+
+### 1. ASTCReadPlugin::initialize — VERIFIED UNGUARDED in 27.0.1
+- identity 27.0.1↔27.2: **48.4%** (major rework in final)
+- 27.0.1 @0x18798df88: **zero** bound checks in full function (4000 insns scanned)
+- 27.2 @0x1878fd740: the DX10 dimension range guard, byte-exact:
+  `sub w8, w21, #0x85; cmp w8, #0x37 (=0xbc-0x85); b.hi error; ubfx w9, w8, #2, #30;
+  adrp x10, <block-size table>; add x8, x10, x9`
+- **Conclusion: 27.0.1 dimensions flow to the block-size table UNCHECKED — confirmed
+  with our own diff, no longer trust-dependent on the original beta diff.**
+
+### 2. PSDWritePlugin::writeOneImage (rlebuf) — VERIFIED FIXED in 27.2
+- identity: 66.7%; the 8-bit depth path REWRITTEN:
+- 27.0.1 @0x187b65178: `mul w8, w10, w21 (32-bit); lsl w0, w8, #1` → alloc, NO check
+- 27.2 @0x187ad81cc: `umulh x8, x10, x21; cset/b.ne error; mul x9 (64-bit);
+  tbnz x9, #0x3f; lsl x0, x9, x8` → alloc with full 64-bit + two overflow checks
+- **Conclusion: Apple fixed exactly the 32-bit truncation we identified. The
+  rlebuf asymmetric-check finding is real and was silently patched in 27.2.**
+
+## 🔥🔥 NEW SILENT FIX #2: BC (Block Compression/DDS) — 27.2 diff (2026-11-04)
+
+Batch diff of all 24 ImageIO plugins (initialize/testHeader): systemic baseline
+~65-70% identity (infrastructure change), but **below baseline**: BC 43.5% (tied
+with ASTC), ASTC 43.5%, HEIF 50.3%, KTX 51.9%, ETC 55.3%.
+
+**BCReadPlugin::initialize @ 27.2 0x187a225c4** — new range-check absent in 27.0.1:
+```
+sub  w8, w8, #0x83     ; value - 0x83
+cmp  w8, #0x10         ; range [0x83, 0x93] = 16 table entries
+b.cs → error
+adrp x9, <table>       ; table indexed AFTER the check
+```
+Same pattern class as the ASTC guard (sub+cmp+branch before table indexing).
+27.0.1 BC has no such sequence → **BC was silently hardened too**.
+
+**Reusable hunter:** sweep every plugin's 27.2 binary for new `sub w?, w?, #imm;
+cmp #imm; b.cs/b.hi` sequences absent in 27.0.1 → enumerates ALL silent
+table-index fixes in one pass. TODO next session.
+
+HEIF/KTX/ETC low identity = other rework, no new sub-guards found in this pass.
+
+## 🚀 SWEEP RESULTS — 9 new silent guards in 5 plugins (2026-11-04, session 4)
+
+The sub+cmp+branch hunter swept all 24 ImageIO plugins (initialize, 16000-insn
+windows, 27.0.1 vs 27.2): **Apple silently hardened the ENTIRE texture family**:
+
+| Plugin | New guards (sub imm / cmp imm) | 27.2 VA |
+|--------|-------------------------------|---------|
+| ASTC | #0x85 / #0x37 | 0x1878fd740 |
+| BC | #0x17 / #0x8 + #0x1c / #0x5 (+#0x83/#0x10 found earlier) | 0x187a22af8, 0x187a22b88 |
+| KTX2 | #0x2 / #0x7 | 0x1879e3158 |
+| PVR | #0x85 / #0x37 (SAME window as ASTC — shared dimension table pattern) | 0x187a5aae8 |
+| RAD | #0x2 / #0x4 ×4 (per-configuration) | 0x187ae90b4, 0x187ae90e8, 0x187ae912c, 0x187ae920c |
+
+The other 19 plugins: zero new guards. The texture family (ASTC/BC/KTX2/PVR/RAD)
+was the only one silently hardened — consistent with the block-size-table bug
+class discovered in the ASTC/DDS lead, now fixed family-wide in 27.2.
+
+**Novelty:** this enumeration is first-public. The 27.2 advisory's ImageIO CVEs
+(11 total, vague descriptions) likely include several of these — matching them
+1:1 requires per-CVE PoC work (device), but the FIX MAP is complete.
+
+## CVE-2026-112706 fix diff (2026-11-04, session 4) — state
+
+- 27.2 rootfs extracted; **mediaplaybackd shim binaries are functionally
+  identical** (only version strings 24A413i→24B115) — the fix is NOT in the shim.
+- Message keys (CreationURL/ByteStreamDetails/FileDescriptor/etc.) present in
+  BOTH versions, neighborhoods byte-identical — the fix is pure code logic.
+- The logic lives in **FigByteStreamServer** (strings `<< FigByteStreamServer >>`,
+  service name, FigServedByteStreamState) inside a subcache-05 dylib; no exported
+  symbols → locating + diffing the function needs one more Ghidra pass on CoreMedia
+  (caveat: FigSandboxRegisterURLWithProcess — the registration call the fix likely
+  hardens — is in CoreMedia per the ingestion analysis).
+- Breadcrumbs set: strings block @ subcache .05, `FigSandboxRegistrationForCreationURL`
+  key exists in both versions — the 27.2 whitelist likely gates the REGISTER step.
+
+## 🎯 Behavioral probe v1 result + testHeader decoded (2026-11-04, session 4)
+
+**Probe v1 (real device): ALL 18 fixtures survived, images=0 everywhere.**
+Root cause found by decompiling `IIO_Reader_ASTC::testHeader` (27.0.1, Ghidra):
+1. **Raw .astc is NOT accepted** — the reader checks a magic dword at **data offset 0x18**
+   (24-byte container prologue!) against THREE constants: 0x4B415354 / 0x4B324154 /
+   0x41535443 ("KAST"/"K2AT"/"ASTC" as big-endian FourCCs — Apple texture container
+   variants). Our fixtures had the ASTC magic at offset 0 → never matched.
+2. **`.ktx` route is UTI-gated**: requires kCGImageTypeIdentifierKTX/KTX2 hint (from file
+   extension) AND size > 0x40 (KTX1) / > 0x50 (KTX2). Our ext_confusion.ktx was 32 bytes.
+3. `valid_2img.bin` (IAKC) was misplaced: IAKC is MediaAnalysis's own container, not a
+   CGImageSource format — in-process probe can't test it.
+
+**Negative result explained — not a refutation.** Probe v2 plan:
+- fixtures with 24-byte prologue + the three container magics at 0x18, size > 0x40
+- decode with UTI type-hint options (kCGImageTypeIdentifierASTC/KTX)
+- re-test on device (device iOS version still needed! unguarded path exists only on 27.0.x)
+
+## Probe v2 result (2026-11-04, device = iOS 27.0 beta 4, pre-hardening)
+
+**Still nil/images=0 on all 9 container fixtures (magic@0x18, size>0x40, UTI hints).**
+
+Interpretation: two failed iterations on static-derived fixtures. The reader-selection
+path (CGImageSourceCreateWithDataEx → IIO_ReaderHandler::buildPluginList → testHeader
+dispatch) does not engage IIO_Reader_ASTC::testHeader the way our fixtures assume —
+either the UTI strings we used are wrong, the [x22,#0x18] load isn't file data
+(Ghidra arg-renumbering uncertainty in testHeader decompile), or plugin selection
+happens through different machinery entirely.
+
+**Next decisive step (static, no device):** trace the actual selection path in the
+cached full disasm (/tmp/iio_disasm.txt): _CGImageSourceCreateWithDataEx →
+buildPluginList → the testHeader call sites — establish exactly what data pointer /
+UTI string reaches each testHeader, then derive fixtures from THAT.
+Round-trips to the device stop until this is closed.
+
+## Probe v3 (2026-11-04) — allowable-types steering
+
+Selection-path trace found: `CGImageSourceCreateWithDataEx` reads
+**`kCGImageSourceAllowableTypes`** (takes precedence over deprecated
+`kCGImageSourceDecodeFormatAllowlist`) — a list of type identifiers steering the
+reader selection loop. Type identifiers in ImageIO: **`ATX-ASTC`**, **`ATX-420f`**
+(Apple texture container; our magic@0x18 dwells = ATX subtypes). Public texture
+API surface: `CGImageTextureDataCreate` etc.
+
+Probe v3: options = {kCGImageSourceAllowableTypes: [ATX-ASTC, ATX-420f],
+kCGImageSourceTypeIdentifierHint: ATX-ASTC} on every fixture. Awaiting device run
+(27.0 beta 4 = pre-hardening, valid target).
+
+## 🔥 ATX HEADER SPEC RECOVERED (2026-11-04, session 4 cont.) — probe v4 built
+
+Decompiled `readHeader` validation (0x1878d064c, ImageIO 27.0.1). ATX container:
+header size **0x54 (84 bytes)**, fields:
+```
+version     @0x00 (int)  == 1        // our zero-prologue died here: "version [0]"
+mipmapA     @0x18, mipmapB @0x1c
+pixelDepth  @0x20 >= 0x21
+faceCount   @0x28 < dataSize
+mipmapLevel @0x2c ∈ [1, 32-LZCOUNT(max)]
+orientation @0x38 < 9
+watermark   @0x3c, 16 bytes          // bytes compared against 'U'(0x55); popcount
+                                     // trick must yield u16 ∈ [4, 16) — Apple
+                                     // watermark/anti-tamper, table at 0x187dbfb20
+alpha       @0x50 < 7
+```
+All three prior probes died at version==0 → "unsupported ATX version [0]" — every
+negative result explained. **Fixtures v4 (15): valid ATX headers × 5 watermark
+candidates × {overflow dims, block0, valid baseline}** — one watermark variant will
+pass the [4,16) window, and then the payload reaches the (27.0.1: unguarded) ASTC
+block-size math. ASTCProbe.ipa rebuilt (v4).
+
+## PROBE v4 RESULT + WATERMARK TABLE DECODED (2026-11-05)
+
+**Device telemetry: ALL 15 fixtures survived — and the run is INVALID as a negative:**
+the device was on **26.6.1 RC (iPhone 13)**, not iOS 27 (confirmed in TG). The whole
+ATX/ATXReadPlugin surface differs there; fixtures never reach the 27.0.1 code under
+test. No conclusion about watermark/trigger — probe must run on a 27.0.x build
+(delayedOTA window to 24A446/27.0.x open until 24/01/2027).
+
+**Watermark check fully decoded (static, no device needed):**
+table `DAT_187dbfb20` = `01 02 04 08 10 20 40 80 01 02 04 08 10 20 40 80`
+(weights 1<<(i%8) for bytes 0..15 of the watermark). Validation sim:
+```
+mask_i  = (wm[i] == 'U') ? 1<<(i%8) : 0
+sVar6   = Σ mask (NEON_ext slice — either bytes 0..7 or 8..15, both modeled)
+uVar4   = (popcount(sVar6>>8) << 8) | (popcount(sVar6&0xff) + popcount(sVar6>>8))
+REJECT if uVar4 < 4 || uVar4 == 16
+```
+Candidate outcomes (identical under both slice models):
+- `allU` (55×16): uVar4=8 → **PASS** (both models)
+- `altU` (5500×8): uVar4=4 → **PASS** (both models)
+- `halfU` (55×8 + 00×8): passes only under bytes-0..7 model
+- `ff`, `zero`: rejected (0)
+
+So **v4's candidate set was already correct** — `allU` passes under every model.
+Negative result on the 26.6.1 device says nothing about the trigger. Next run:
+same IPA on any iOS 27.0.x device. Until then the ATX trigger chain is fully
+statically characterized: valid header (allU watermark) → payload reaches
+(27.0.1: unguarded) block-size math `sub w8,w21,#0x85; cmp w8,#0x37`.
+
+## CVE-2026-112706 DIFF CAMPAIGN — «FIXED IN 27.2» CLAIM UNCORROBORATED (2026-11-05)
+
+Full cross-version diff of every bytestream-serving component, 24A446 ↔ 24B119:
+
+1. **`/usr/libexec/mediaplaybackd`: functionally identical.** 622 differing bytes
+   total — all in `__info_plist` (build metadata) and `__LINKEDIT` (version
+   strings). `__text` diff: identity 1.000 (94 insns, byte-for-byte same logic).
+2. **MediaToolbox `FigByteStreamServer`: identical.** The real CVE surface is here
+   (not CoreMedia): service string `com.apple.coremedia.mediaplaybackd.bytestream.xpc`
+   + keys (`CreationURL`, `FileOpenOptions`, `SandboxRegistrationForCreationURL`,
+   `ByteStreamDetails.FileDescriptor`, `ServerPID[Version]`, `PreferEndpointBacked...`)
+   live in MediaToolbox at 0x1975fbe00.. (2701). All **16** functions matching
+   `frbs_*/ByteStreamServer*` normalized-diff clean (≥0.995 identity).
+   Symbol sets: identical (175==175).
+3. **CoreMedia FigXPC layer: codegen refactors only.** 576/578 functions matched;
+   real diffs = `RemoveConnection` (+null-check & cold path), `SendAsyncMessage...
+   block_invoke` (outlined-call reshuffle) — refactors, not security fixes.
+4. `CoreMediaTestFoundation` (registers servers via
+   `_CoreMediaTestFoundationStartServer`, weak-linked by mediaplaybackd) is an
+   `/AppleInternal` component — **absent from the production dyld cache**.
+
+**Implication (two-sided):**
+- The quarantined TG doc's "Fixed: iOS 27.2 (server-side path whitelist + fd type
+  validation)" is **not corroborated by the binaries**. Either the doc overstates
+  the fix, or the exploit's fate on 27.2 is unknown. Doc reliability: downgrade —
+  its *technique* details were externally consistent (service name verified in
+  launchd plist; FigXPC handshake code verified), but its *fix claim* now has no
+  binary evidence.
+- If the doc is right that 27.0.1 is vulnerable, then no patched component exists
+  to diff — the "fix" may have shipped in 27.1/27.2 via a different surface
+  (sandboxd profile, libxpc fd handling) — next diff targets if ever needed:
+  libxpc `xpc_dictionary_dup_fd`, sandboxd profiles.
+- For the paper/portfolio: our bytestream surface map (service name, key protocol,
+  RTM metrics logging of client CreationURLs @ `RTMCopyGeneralMetrics`) is
+  first-public and stands on its own regardless.
+
+Artifacts: tmp_ipsw/{mt_2701,mt_272,cm_2701,cm_272}.dis (1.5 GB, gitignored).
+
+### CVE-112706 addendum: libxpc ruled out too (2026-11-05, session cont.)
+
+`libxpc.dylib` (usr/lib/system, 647376 bytes both builds — identical size):
+- `_xpc_dictionary_dup_fd`: identity 0.927, diffs = GOT/struct-offset relocations
+  only (#0x708→#0xa28 etc.), zero logic changes.
+- `_xpc_fd_create`: same pattern. `_xpc_connection_get_audit_token`: 1.000.
+- **Full sweep: 1498/1498 functions match** (identity ≥0.9 or ≤3-insn size delta).
+
+**Campaign closed.** Diffed components covering the entire bytestream round trip
+(daemon → MediaToolbox FigByteStreamServer → CoreMedia FigXPC → libxpc fd
+passing): ALL unchanged 24A446 ↔ 24B119. The doc's "fixed in 27.2" has no binary
+support anywhere we can diff. Unreachable-from-userland layers left: sandboxd
+profiles / kernel sandbox policy (kernelcache diff — separate campaign, low
+likelihood for an XPC fd-laundering fix). Working hypothesis: the TG doc's fix
+claim is fabricated or aspirational; the technique may still work on 27.2 —
+which, for a *defensive* writeup, is exactly the kind of discrepancy worth
+publishing (with the caveat that we could not verify the original exploit
+dynamically).
+
+## CVE-2026-113915 DIFF CAMPAIGN — RACE CANDIDATES MOSTLY SURVIVE 27.2 (2026-11-05)
+
+mediaanalysisd is a stripped 3.7MB single-__text launcher binary; the 10 race
+candidates (race_*.c, TOCTOU family) live in it. Method: window-diff (500 insns)
+with 4-gram mnemonic anchor + 5-offset consensus voting (single-anchor drift
+caught and corrected — first pass had silently aligned to the wrong function).
+
+| candidate | 27.0.1 VA | identity 27.2 | verdict |
+|---|---|---|---|
+| requestURLAssetAnalysis...resourcePaths...sandboxTokens | 0x100068324 | **1.000** | UNCHANGED (flagship ingestion path!) |
+| requestWallpaperUpgrade... | 0x100070378 | **1.000** | UNCHANGED |
+| consumeSandboxExtension #2 | 0x10005f02c | **1.000** | UNCHANGED |
+| requestMediaAnalysisDatabaseAccessSandboxExt | 0x10005eaf4 | **1.000** | UNCHANGED |
+| filePath (user-controlled) | 0x1001b39c8 | **1.000** | UNCHANGED |
+| FUN_10021512c | 0x10021512c | 0.976–1.000 | unchanged |
+| consumeSandboxExtension #1 | 0x10001a378 | 0.726 | recompiled: sp→x29 stack shuffle; **removed** `bl+cbz` check pair @0x10001a7b8 and an 'L007' (0x4C303037) version gate @0x10001a840; **no new bounds/TOCTOU guard added** |
+| requestEmbeddingStoreSandboxExt | 0x100097ed0 | 0.918 (weak anchor) | likely refactor |
+| registerClientforPhotoLibraryURL / storeAnalysisforAsset | 0x100017fd4 / 0x1000177ac | no confident anchor | unresolved (low-priority) |
+
+**Implication:** the core CVE-2026-113915 TOCTOU surface — ingestion reading
+client-supplied resourcePaths at T1 against an audit-token check taken at T0 —
+is byte-identical in 27.2. Combined with the CVE-112706 result, the pattern for
+this TG doc is now systematic: **"Fixed in 27.2" claims carry no binary
+evidence in either component we fully diffed.** The doc's technique sections
+remain externally consistent (services, keys, call chains all verified) — its
+fix-status fields look fabricated.
+
+mediaanalysisd did grow 60KB 27.0.1→27.2 (new features elsewhere); the growth
+is not in the race set. mediaanalysisd-generation: launcher __text identical
+(6/6 funcs); the 24KB binary delta is cstrings/LINKEDIT only.
+
+Method note (reusable): single 4-gram anchors drift silently — always require
+multi-offset consensus (≥3 of 5 windows voting for the same delta) before
+trusting a window alignment.

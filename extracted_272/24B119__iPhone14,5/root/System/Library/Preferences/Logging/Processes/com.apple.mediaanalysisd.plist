@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.coreml</key>
+	<dict>
+		<key>Level</key>
+		<dict>
+			<key>Enable</key>
+			<string>Inherit</string>
+			<key>Persist</key>
+			<string>Info</string>
+		</dict>
+	</dict>
+	<key>com.apple.espresso</key>
+	<dict>
+		<key>Level</key>
+		<dict>
+			<key>Enable</key>
+			<string>Inherit</string>
+			<key>Persist</key>
+			<string>Info</string>
+		</dict>
+	</dict>
+	<key>com.apple.ane</key>
+	<dict>
+		<key>Level</key>
+		<dict>
+			<key>Enable</key>
+			<string>Inherit</string>
+			<key>Persist</key>
+			<string>Info</string>
+		</dict>
+	</dict>
+</dict>
+</plist>
