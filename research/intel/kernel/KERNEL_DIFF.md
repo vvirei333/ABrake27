@@ -128,3 +128,49 @@ Key facts (from the instruction stream):
 Method note: whole-kext normalized diff (44.5k insns, identity 0.9997) resolves
 what the whole-kernel 120MB dis could not — per-kext extraction is the right
 kernel v2 technique; kernel-wide llvm-objdump stays unusable for PRELINK_TEXT.
+
+## v3 CAMPAIGN: whole-kext sweep + sandbox kext deep-dive (2026-11-05)
+
+`ipsw kernel extract --all` on both kernels → 251 kexts each, byte-map:
+**34 changed by size, 0 added, 0 removed.** Largest deltas:
+```
++114672  com.apple.driver.ASIOKit              (feature growth)
+ +65736  com.apple.driver.AppleH11ANEInterface (ANE)
+ +32840  com.apple.driver.RTBuddy
+ +16424  com.apple.kernel
+ +16384  com.apple.security.sandbox             ← deep-dived
+ +16384  com.apple.driver.AppleAVE2 / DCPAVFamilyProxy / usb.networking
+   +16   corecrypto, apfs, tmpfs, AppleSEPCredentialManager, IOSkywalkFamily ...
+```
+
+### com.apple.security.sandbox: identity 0.9862, 17 clusters
+
+String-attributed change map (27.0.1 VAs):
+| cluster | attributed to | read |
+|---|---|---|
+| 489 insns @0x…9f6a538 | `%s: size underflow` | bounds-check rework in container/profile parsing |
+| 371 @0x…9f80654 | `failed to write %zu bytes to %s at offset %llu` | profile-store path reworked |
+| 257 @0x…9f7fdb0 | `out-of-range address` | **address validation tightened** |
+| 122 @0x…9f7e810 | `truncated` | input validation |
+| 105 @0x…9f66fc8 | `renamex_np(RENAME_SWAP) denied: %d` | deny-path rework |
+|  73 @0x…9f7f5b8 | `requires %u profile flags, max is %zu` | profile-flags validation |
+|  52 @0x…9f7bde0 | `unsupported extension type` | extension handling |
+
+New profile string: `/System/Library/Frameworks/SystemConfiguration.framework/
+deprecated-get-network-info` — a *deprecated* profile stub added (network-info
+entitlement plumbing being retired in stages).
+
+### Why it matters for the CVE-112706 thread
+The doc's bytestream sandbox-escape chains through **this kext** (the daemon's
+profile lives here). Unlike every other CVE-112706-linked component, the
+sandbox kext DID change in 27.2 — in validation/bounds regions, exactly the
+shape a profile-side mitigation would take. This is the *only* binary evidence
+compatible with a real 27.2 mitigation of the bytestream issue; the doc's
+"server-side path whitelist + fd type validation" wording remains unsupported,
+but "fixed via sandbox profile" now has a candidate home. Verdict on the doc
+stays "fix-claim unverified", with a sharper pointer.
+
+### Method note
+Whole-kext sweep (byte map) → pick changed kexts → normalized dis diff +
+string attribution. Reusable; next candidates: com.apple.kernel (+16424,
+innermost), AppleT8110DART (+24), corecrypto (+16).
