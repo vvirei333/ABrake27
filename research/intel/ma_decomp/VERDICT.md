@@ -681,3 +681,24 @@ added between the vulnerable and fixed builds.
 Portfolio phrasing: "we located Apple's silent fix for the in-the-wild
 CVE-2026-86950 via CG-SEC-marker diffing: a PDF Type 5 shading
 range/colorspace dimension check added to _CGPDFShadingType5Init in 27.2."
+
+### SEC-marker global sweep + second fix attributed (2026-11-06, cont.)
+
+Full-cache sweep (`SEC-[0-9]{6,12}` across every dyld cache chunk, both builds):
+- 27.0.1: **0 markers anywhere**
+- 27.2: **exactly 2, both CoreGraphics** — Apple used this convention only here.
+
+Second marker: **`CG-SEC-187882136: used-cmap codespace-dimension mismatch
+contained (decoded %zu codes from a %zu-byte code); falling back`**
+→ xref @0x183ed7554 inside **`_cmap_convert`** (0x183ed71a4, the PDF CID/CMap
+character-decoding loop). Unlike the Type5 check (hard fail), this one
+*contains* the anomaly: clamps the decode to what the codespace dimension
+allows and falls back gracefully — a bounds-fix in the PDF font CMap decoder.
+
+Both markers live in the **PDF parsing pipeline** (shadings + CMaps) — the two
+halves of "maliciously crafted file → RCE" chains, consistent with CVE-2026-86950
+being a PDF/CoreGraphics file-processing bug, possibly fixed via two hardening
+points rather than one.
+
+Marker convention note for future diffs: grep `SEC-[0-9]{6,12}` across cache
+chunks = instant map of Apple's silent security additions for any build pair.
