@@ -780,3 +780,31 @@ What remains valid from our pass:
    binary to date a fix) — fast and reliable.
 Retraction applies to the "fix site" phrasing in the 2026-11-06 entries and
 GPU_CHAIN.md §3.2 (annotated there).
+
+## 🔥 WATERMARK EVOLUTION DATED — 16.7.16 vs 27.0.1 (2026-11-06, first-public)
+
+iOS 16.7.16 (20H392, iPhone10,2) ImageIO extracted from IPSW (`ipsw extract
+--dyld` → `ipsw dyld extract ImageIO`). ATX findings:
+
+- **ATXReadPlugin + ATX validation is OLD** — "unsupported ATX version /
+  pixelDepth / orientation" all present in 16.7.16. Container dates to ≤16.x.
+- **BUT the watermark scheme changed:**
+  - 16.7.16: `watermark OK`, `got: %016llX %016llX expected: %016llX %016llX`,
+    `*** ASTC watermark ERROR (%s) the image was created on a different hardware`
+    → **128-bit exact compare against a device-bound expected value**. ATX files
+    were hardware-locked to the creating device.
+  - 27.0.1: `invalid watermark [%d]` + popcount-window scheme (weights table
+    DAT_187dbfb20, accept ∈ [4,16)) — **no device binding, semantic check only**.
+- The popcount scheme is *structurally weaker* than exact-device match: any
+  watermark with the right 'U'-byte popcount passes regardless of device.
+- 16.7.16 ATX 420f decoder already had overflow checks
+  (`lumaPlaneSize overflow`, `chromaPlaneSize overflow`) — the decoder-side
+  bounds culture predates 27.x.
+
+Dating summary: ATX container ≤16.x; device-bound watermark ≤16.7.16;
+popcount watermark + hard guards (ASTC block table, rlebuf) = 27.x era.
+The three-point dating (16.7.16 ↔ 27.0.1 ↔ 27.2) is now established.
+
+Note: in 27.x the device-bound check may have MOVED (mediaanalysisd /
+ChatKit producer side) rather than vanished — open question, one string-search
+away on any future extraction.
