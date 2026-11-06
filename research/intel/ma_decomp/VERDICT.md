@@ -808,3 +808,26 @@ The three-point dating (16.7.16 ↔ 27.0.1 ↔ 27.2) is now established.
 Note: in 27.x the device-bound check may have MOVED (mediaanalysisd /
 ChatKit producer side) rather than vanished — open question, one string-search
 away on any future extraction.
+
+### ⚠️ REFINEMENT: both watermark schemes coexist in 27.0.1 (2026-11-06, cont.)
+
+Grep of the full 27.0.1 cache showed "different hardware" still present —
+verified directly in ImageIO 27.0.1:
+```
+invalid watermark      @0x5cfc82   ← popcount pre-filter (readHeader)
+watermark OK           @0x5d0010   ← decode-stage
+got: %016llX %016llX   @0x5d001e   ← device-bound 128-bit compare (16.x scheme, ALIVE)
+different hardware     @0x5d0086
+```
+Correct model: the popcount window is an **early cheap rejection added to
+readHeader**; the device-bound 128-bit check **still enforces at decode**.
+The 16.x scheme was not replaced — a pre-filter was layered on top.
+
+Implication for the ATX/ImageIO delivery vector: a foreign-device ATX file
+can now pass the header popcount (our allU fixtures did) but **still dies at
+the device-bound decode check** — which retroactively explains and predicts
+`source OK, images=0, no crash` on any real 27.0.1 device. The foreign-device
+ATX path via ImageIO is closed at decode unless the producer-side accepts
+external files (open question above). GPU_CHAIN-style conclusion: hardening
+here is layered, not replaced — pre-filters accumulate in front of legacy
+exact checks.
