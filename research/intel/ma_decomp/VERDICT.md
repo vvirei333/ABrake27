@@ -757,3 +757,26 @@ Practical conclusion for GPU_CHAIN.md: at the kext/firmware layer visible
 from the kernelcache, 27.2's GPU delta is churn + one table extension; the
 *hardening* that killed the GPU→kernel bridge happened in SPTM (TLBI verify),
 not in the GPU firmware itself.
+
+## ⚠️ CORRECTION: CVE-2026-86950 ATTRIBUTION RETRACTED (2026-11-06)
+
+The public writeup (califio/publications, "The Great Glyph Grift") gives the
+true root cause — **not** our CG-SEC markers:
+- Root cause: UB double→int32 cast in `static inline aa_double_to_fixed()`;
+  clang emitted saturating FCVTZS in `aa_moveto` but truncating FCVTZS+XTN in
+  `aa_lineto` → mixed representations → signed delta wraps in `aa_add_edges` →
+  bbox under-reports → coverage buffer undersized → controlled 16-bit OOB in
+  `aa_cache_render`. Trigger: PDF + crafted TrueType with composite-glyph
+  scaling matrices (zero-click via WhatsApp PDF rendering).
+- **Fixed in 26.7.1** — before both our builds.
+- Verified against our binaries: clamp constant ±1073737729 (0x3FFFF001
+  encoding) present in 27.0.1 **and** 27.2 → the fix predates 27.0.1.
+
+What remains valid from our pass:
+1. The **CG-SEC marker convention** (27.0.1: zero; 27.2: exactly two, both PDF
+   pipeline: Type5 shading range/colorspace fail + `_cmap_convert` containment)
+   — still first-public, still silent hardening, just **unrelated to 86950**.
+2. The clamp-presence check method (find the advisory's magic constant in the
+   binary to date a fix) — fast and reliable.
+Retraction applies to the "fix site" phrasing in the 2026-11-06 entries and
+GPU_CHAIN.md §3.2 (annotated there).
