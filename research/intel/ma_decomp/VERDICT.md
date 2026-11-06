@@ -639,3 +639,18 @@ for 27.x, no VRESEARCH/VPHONE strings. VM negatives are not evidence about
 Project status: the on-device confirmation loop is blocked on access to REAL
 hardware running iOS 27.0.x. Static side remains exhausted-and-consistent;
 delayedOTA window to 24A446 closes 2027-01-24.
+
+## EXTERNAL CORROBORATION (2026-11-05, intel sweep)
+
+- Community rumor "iOS 27.2 Beta 3 patched an SPTM bug" (r/jailbreak) aligns
+  with our static diff: SPTM 820.0.22 → 820.40.24 TLBI-verification at retype.
+  Our first-public finding now has independent, non-binary corroboration.
+- The Hexacon untethered jailbreak (iPhone 18 Pro, 27.0.1) is attributed to
+  **CVE-2026-86950** — CoreGraphics OOB write, exploited in the wild, patched
+  27.2 + backported to 18.7.1/26.7.1 ("compiler undefined behavior" bug class).
+  Adjacent to our ImageIO surface; 27.0.1 confirmed vulnerable-window by demo.
+- 27.0.1 R/W writeup + exploit "release soon" teased (r/jailbreak); signing
+  window ~3 months.
+- Watch: claim "PoCs for 31 CVEs fixed in 27.2" + "persistent exploit survives
+  27.2 update" — UNVERIFIED community posts, zero-trust until writeup/code.
+- pwnumbda: no public traces — treat as vaporware until proof.
