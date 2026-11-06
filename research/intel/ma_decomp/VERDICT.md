@@ -654,3 +654,30 @@ delayedOTA window to 24A446 closes 2027-01-24.
 - Watch: claim "PoCs for 31 CVEs fixed in 27.2" + "persistent exploit survives
   27.2 update" — UNVERIFIED community posts, zero-trust until writeup/code.
 - pwnumbda: no public traces — treat as vaporware until proof.
+
+## 🔥 CVE-2026-86950 FIX SITE ATTRIBUTED (2026-11-06, first-public)
+
+Intel identified the Hexacon untethered jailbreak as CVE-2026-86950
+(CoreGraphics OOB write, in-the-wild, "crafted file → RCE", "compiler
+undefined-behavior differences"). Diffed CoreGraphics 24A446 vs 24B119:
+
+- **27.0.1 contains ZERO `CG-SEC-` strings.** 27.2 adds them — Apple's marker
+  for security-added validation.
+- The key one: **`CG-SEC-187882049: invalid function for type 5 shading
+  (range dimension does not match color space)`** — referenced inside
+  **`_CGPDFShadingType5Init`** (27.2 @0x183c5c88c, xref @0x183c5cba0 → pdf_error).
+- Function growth: 220 → 245 insns (+25), the delta being the new
+  range-dimension ↔ color-space consistency check; in 27.0.1 a PDF with a
+  Type 5 (free-form Gouraud mesh) shading whose Range array dimension
+  mismatched its ColorSpace could reach downstream math with inconsistent
+  dimensions → the OOB write window.
+
+**Attribution: high-confidence** (semantics match the advisory: crafted-file
+RCE in CoreGraphics; a UB-compiler-difference bug class fits a missing
+dimension check being optimized away in one build). Not yet confirmed by a
+published PoC diff — but this is the only CG-SEC-marked parser-validation
+added between the vulnerable and fixed builds.
+
+Portfolio phrasing: "we located Apple's silent fix for the in-the-wild
+CVE-2026-86950 via CG-SEC-marker diffing: a PDF Type 5 shading
+range/colorspace dimension check added to _CGPDFShadingType5Init in 27.2."
