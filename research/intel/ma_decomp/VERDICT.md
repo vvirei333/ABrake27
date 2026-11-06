@@ -702,3 +702,22 @@ points rather than one.
 
 Marker convention note for future diffs: grep `SEC-[0-9]{6,12}` across cache
 chunks = instant map of Apple's silent security additions for any build pair.
+
+## VECTOR SWEEP STATUS (2026-11-06 evening)
+
+| surface | method | result |
+|---|---|---|
+| ImageIO textures | full diff | ✅ 9 silent guards mapped |
+| CoreGraphics | SEC-marker sweep | ✅ 2 markers = CVE-86950 fix pair (Type5 shading, CMap) |
+| SPTM | im4p full diff | ✅ TLBI verify + 4 more |
+| Kernel (AMFI kext) | whole-kext diff | ✅ DER-probe (telemetry) |
+| Kernel (sandbox kext) | whole-kext diff | ✅ validation rework — only bytestream-mitig-compatible change |
+| Kernel (com.apple.kernel) | xref of new asserts | ✅ vm_map lock-overflow diagnostics |
+| Kernelcaches (SEC markers) | sweep | 0 markers — convention is CG/PDF-only |
+| WebKit 44.8MB | string diff | symbol churn only (new private APIs); code-level diff = separate campaign |
+| mediaplaybackd / MediaToolbox / CoreMedia / libxpc | full diffs | identical 27.0.1↔27.2 (CVE-112706 fix-claim unsupported) |
+| mediaanalysisd | window diff w/ consensus | 6/10 TOCTOU candidates identical |
+| libxpc | full function sweep | 1498/1498 unchanged |
+
+Remaining un-swept vectors: WebKit code-level (heavy), GPU firmware (AGX
+firmware im4p not yet extracted), SEP firmware (needs different tooling).
