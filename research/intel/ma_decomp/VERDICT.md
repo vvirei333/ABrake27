@@ -721,3 +721,39 @@ chunks = instant map of Apple's silent security additions for any build pair.
 
 Remaining un-swept vectors: WebKit code-level (heavy), GPU firmware (AGX
 firmware im4p not yet extracted), SEP firmware (needs different tooling).
+
+## GPU FIRMWARE VECTOR (2026-11-06 evening, kext-level)
+
+GPU kexts from the kernelcache filesets, byte-diff 24A446 ↔ 24B119:
+- `AGXG14P` (924KB): 813KB changed — firmware blob **fully rebuilt** (churn).
+- `IOGPUFamily` (414KB): 343KB changed — same rebuild churn.
+- `AGXFirmwareKextRTBuddy64` (49KB): **77 bytes in 3 regions — surgical.**
+- `AGXFirmwareKextG14PRTBuddy` (65KB): surgical too, **same offsets** (shared
+  firmware image).
+
+The surgical patch, decoded (firmware is AArch64 microcode):
+```
+0x4004-0x402a (both images):
+  2701: d503245f(SB) adrp x8, 0xf00164e8   …   adrp x8, 0xf00164e8
+  272 : d503245f(SB) adrp x8, 0xf0016668   …   adrp x8, 0xf0016668
+  → code pointers moved by exactly one 4KB page (twice, mirrored pair)
+0x2a0 (G14PRTBuddy __DATA):
+  table size field 0xfff0ae00 → 0xfff0ae40 → a 64-byte entry ADDED to a table
+0x80b6 (both):
+  adrp page shift 0x0115d2b0 → 0x0116d2b0 (matches the +0x40 relocation)
+0x2a0 (RTBuddy64):
+  16 random-looking bytes replaced → build-id/signature/nonce, not code
+```
+
+Honest read: the RTBuddy firmware family gained a **new 64-byte table entry**
+(some enumerated resource — channel/queue/descriptor) with the code pointers
+relocated one page accordingly; drivers rebuilt alongside. **Not evidently a
+security fix** — shape says feature/compat churn. The security-relevant GPU
+changes, if any, are dissolved inside the fully-rebuilt AGXG14P/IOGPUFamily
+blobs and cannot be localized without a firmware-internal diff (branch-target
+alignment pass) — queued as the deepest layer of the GPU vector.
+
+Practical conclusion for GPU_CHAIN.md: at the kext/firmware layer visible
+from the kernelcache, 27.2's GPU delta is churn + one table extension; the
+*hardening* that killed the GPU→kernel bridge happened in SPTM (TLBI verify),
+not in the GPU firmware itself.
