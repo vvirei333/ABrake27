@@ -901,3 +901,25 @@ binary evidence now point at the same surface. First-public corroboration.
   Apple touched the dext in this window).
 
 Verdict: Wi-Fi vector at kernelcache level = clean (recovery rework only).
+
+## CVE-2026-112705 (AVE2 temporal layers) — cross-check (2026-11-07)
+
+Public PoC repo (MchinaMd57764): NumberOfTemporalLayers=16463 → kernel panic
+@AppleAVE2+0xDA78 on 27.0.1, -12900 error on 27.2. Crash-only (DoS), credits
+Calif/Chollima.
+
+Our kext-level cross-check:
+- Threshold decomposition found: `cmp x25,#0x4000` + `movz x0,#0x4f`
+  (16384+79 = 16463) present **identically in both builds** at matching sites
+  — so the count reaches this path in both; the fix is NOT at this site.
+- Best candidates for the actual 27.2 fix remain the new HEVC parameter-set
+  clamps (AVE_HEVC_CheckVPSExtBounds + VPS/SPS/PPS/RPS count asserts from the
+  earlier diff): temporal-layer count flows into SPS/PPS-driven allocation,
+  and 27.2 clamps exactly those counts. Site-to-site confirmation requires
+  mapping the PoC's panic PC (0xDA78) to its function — pending (our offset
+  math landed in identical code, so the PoC's base differs; likely __TEXT
+  slide-relative vs __TEXT_EXEC).
+
+Verdict: CVE-2026-112705 fix = high-confidence correlated with the new AVE2
+count clamps (class + window match), exact site unresolved. Panic is DoS-only
+per PoC author.
