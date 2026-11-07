@@ -925,3 +925,15 @@ count clamps (class + window match), exact site unresolved. Panic is DoS-only
 per PoC author.
 
 - [murk-sus/F1OOB-PoC](https://github.com/murk-sus/F1OOB-PoC) — claimed IOSurface compressed-plane 32-bit wrap → same-context GPU OOB (27.2 24B115, iPhone14,7). Author = murk-* family (X @murkuwuwu, previously AI-chat "exploits") → low prior, but THIS repo is technically coherent: real IOSurface XML keys (PlaneSize/SliceCount/PlaneDataRegionBytesPerSlice verified present in our kexts), bug class = 32-bit truncation (same class as our rlebuf fix), candid limitations section. IOSurface kext heavily churned 2701↔272 (165KB/501 regions) — verdict on the specific wrap deferred: needs targeted diff of the plane-size computation. Unverified; DoS/same-context only per author.
+
+### IOSurface follow-up: plane-size math UNCHANGED 27.0.1↔27.2 (2026-11-07)
+
+Whole-kext normalized diff (identity 0.9999, 3 micro-clusters): the only
+changes are a state-flag refactor (bytes at struct+0xf0/+0xf1, counter +0x1b)
+— **the compressed-plane size arithmetic was not touched in 27.2**.
+
+Consequence for the murk-sus claim (F1OOB: 32-bit wrap → same-context GPU OOB,
+reported on 24B115): our evidence is **consistent** — if the wrap exists on
+24B115, it was not fixed by 24B119. Credibility of the claim upgraded
+(author's prior was low; binary evidence now supports "unfixed on final").
+Confirmable by a single panic log on 24B119 with the same trigger.
