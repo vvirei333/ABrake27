@@ -976,3 +976,10 @@ corroborating or consistent binary evidence from our diffs.
 - Caveat logged: the 0x3FFFF001 byte-pattern is a WEAK sensor across major
   versions (constant pre-exists in legacy fixed-point code); valid only for
   adjacent-build comparisons within one major line.
+
+### ASTC guard three-point dating confirmed (2026-11-07)
+
+`sub w?,w?,#0x85` immediate (the ASTC block-table bounds guard): **0 in
+16.7.16, 0 in 27.0.1, 5 in 27.2.** The flagship guard born exactly in 27.2 —
+now three-point dated. (cmp #0x37 counts are noisy across other users; the
+sub#0x85 immediate is the clean discriminator.)
