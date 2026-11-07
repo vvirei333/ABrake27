@@ -831,3 +831,31 @@ ATX path via ImageIO is closed at decode unless the producer-side accepts
 external files (open question above). GPU_CHAIN-style conclusion: hardening
 here is layered, not replaced — pre-filters accumulate in front of legacy
 exact checks.
+
+## PRIOR-ART INTEL: dawgyg/AppleResearch report_status (2026-11-07)
+
+Repo now carries a report log (19 reports, snapshot 2026-11-07):
+
+**Fixed (9):** mostly WebKit memory-safety (container overflow read, Style
+TreeResolver UAF, Clipboard UAFs, CacheStorageConnection cross-thread race →
+fixed iOS 26.6.1). Two with CVEs: **CVE-2026-84505** (opendirectoryd OOB
+write, macOS) and **CVE-2026-84492** (XNU IOMemoryMap double-release UAF in
+AppleVideoToolboxParavirtualization — kernel, fixed across iOS 27 family →
+dead on our 27.0.1 target).
+
+**Declined (10) — but the declined ones are REAL leads:** Apple closed them
+as "not a security issue", yet several are web-reachable and unfixed:
+- WebKit MIMESniffer WebM OOB read (web-reachable, stock 26.5)
+- WebKit TextResourceDecoder KanjiCode::judge 1-byte OOB read (stock Safari)
+- WebKit FileSystem IPC missing owner check → **cross-origin OPFS access**
+- WebGPU copyExternalImageToTexture OOB read
+- Font.mdimporter FOND StyleTable 1-byte OOB read (zero-click .dfont)
+- corestoragehelperd no-auth + symlink race → root FDE metadata write
+- fskitd unprivileged state injection
+
+Read: Apple's bar rejects lone OOB *reads*/crashes — but in *chain* terms
+(these compose with a write primitive) they remain live attack surface.
+The MIMESniffer/KanjiCode/OPFS trio is WebKit-code-diff campaign material.
+
+Methodology gold: the "declined" list maps Apple's triage bar precisely —
+reporting strategy for the portfolio: chain-composite findings, not solo reads.
