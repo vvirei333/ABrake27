@@ -963,3 +963,16 @@ session — Apple silently fixed the APFS UAF class in 27.2 without CVEs.
 Session metric: every "pending/confirmed" third-party report we checked
 (SPTM rumor, AVE2 tail-write, IOSurface wrap, APFS UAF) now has either
 corroborating or consistent binary evidence from our diffs.
+
+### Three-point CG marker map (2026-11-07, 16.7.16 added)
+
+| build | size | SEC-markers | aa-clamp byte-pattern |
+|---|---|---|---|
+| 16.7.16 (20H392, t8101) | 7.37MB | 0 | present |
+| 27.0.1 (24A446) | 9.95MB | 0 | present |
+| 27.2 (24B119) | 9.97MB | **2** | present |
+
+- SEC-marker convention confirmed born in 27.2 (0→0→2).
+- Caveat logged: the 0x3FFFF001 byte-pattern is a WEAK sensor across major
+  versions (constant pre-exists in legacy fixed-point code); valid only for
+  adjacent-build comparisons within one major line.
