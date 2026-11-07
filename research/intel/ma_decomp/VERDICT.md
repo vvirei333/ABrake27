@@ -861,3 +861,26 @@ Methodology gold: the "declined" list maps Apple's triage bar precisely —
 reporting strategy for the portfolio: chain-composite findings, not solo reads.
 
 - [Ping-2o/ios26-27-iboot-research](https://github.com/Ping-2o/ios26-27-iboot-research) — AI-assisted iBoot audit (26/27): reconstruction-tooling audit, no confirmed vulns (F1 clear-loop overstride 16B, F2 32-bit boot-delay wrap — config-only). Borrowable method: reconstruction cross-check vs LLVM on 170k branch targets.
+
+## 🔥 APPLEAVE2: SILENT HEVC HARDENING MATCHES PENDING REPORT (2026-11-07)
+
+dawgyg/AppleResearch has a PENDING submission "AppleAVE2 HEVC tail write".
+Our AVE2 kext diff (24A446 ↔ 24B119, +16KB) shows Apple added exactly that
+class of validation in 27.2:
+- New named bounds-check function: **`AVE_HEVC_CheckVPSExtBounds`**
+- New out-of-range asserts: HEVC VPS/SPS/PPS/RPS **counts**, MCTF strength
+  count `[0 %d]`
+- New invariant asserts: `num_short_term_ref_pic_sets < 65`,
+  `iNumSliceGroups == 1 && 1 <= iNumRefIdxL0DefaultActive`,
+  `num_tile_columns_minus1 <= 256 && num_tile_rows_minus1 <= ...`
+- Reworked "invalid MB/CTU stats firmware buffer" assert (+ pid fields)
+
+Reading: parameter-set count fields (VPS/SPS/PPS/RPS) were previously trusted
+into allocation/iteration logic — the classic tail-write shape — and 27.2
+clamps them all. Whether this closes dawgyg's specific pending report can't
+be confirmed without their PoC, but the *class match* is exact: same driver,
+same structure family (HEVC parameter sets), same fix window (27.2, the
+"silent hardening" build).
+
+Cross-validation milestone: a pending third-party report + our independent
+binary evidence now point at the same surface. First-public corroboration.
