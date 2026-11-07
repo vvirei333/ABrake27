@@ -937,3 +937,29 @@ reported on 24B115): our evidence is **consistent** — if the wrap exists on
 24B115, it was not fixed by 24B119. Credibility of the claim upgraded
 (author's prior was low; binary evidence now supports "unfixed on final").
 Confirmable by a single panic log on 24B119 with the same trigger.
+
+## 🔥 APFS: 27.2 HARDENING MAPS ONTO dawgyg's CONFIRMED UAF REPORTS (2026-11-07)
+
+Whole-kext diff `com.apple.filesystems.apfs` (identity 0.9840, 46 clusters,
+~10k changed insns — the biggest single-kext delta of the campaign). Top
+clusters attributed via string refs:
+
+1. **`btree_node_free_list_entry_validate`** (549 insns changed) — a named
+   free-list entry validation rework = **the fix site for the "apfs btree
+   node compact UAF / controlled writes" report class**.
+2. **"range 0x%llx:%lld overlaps with recently-freed range"** (2166 insns,
+   biggest cluster) — freed-range overlap detection in spaceman = **anti-UAF
+   allocation hardening**, matches the spaceman report family.
+3. **"spaceman fs reserve alloc count underflow"** — underflow guard reworked.
+4. `superblock failed sanity checks` (+count), "Error mapping freed IP block
+   range", "invalid state %d for compressed file" (compressed-file state
+   machine tightened), apfs_vnop_mmap rework, xattr/jobj release path.
+
+All three top categories (btree free-list, freed-range overlap, spaceman
+underflow) map one-to-one onto dawgyg's CONFIRMED apfs btree-node-compact-UAF
+and spaceman report family. Independent binary corroboration #3 of the
+session — Apple silently fixed the APFS UAF class in 27.2 without CVEs.
+
+Session metric: every "pending/confirmed" third-party report we checked
+(SPTM rumor, AVE2 tail-write, IOSurface wrap, APFS UAF) now has either
+corroborating or consistent binary evidence from our diffs.

@@ -118,3 +118,59 @@ What the precise string-set diff (32 new / 2 gone) actually shows as NEW in
 So the honest 27.2 SPTM hardening list: TLBI verify (flagship), handoff
 page-count limit, NVMe hib latch, DART knob exclusivity, FTE refcnt assert.
 The ~2,200-insn hibernate region diff is mostly rework around these.
+
+## Addendum 2026-11-06: a sixth cluster the string pass missed — **UAT Dekker lock/gate + outer TLB flush**
+
+Re-ran the string diff on the same two images with a lower threshold (**len ≥ 6**
+instead of ≥ 10): 2,500 vs 2,528 unique strings → **45 new / 17 gone** (the earlier
+pass reported 32/2). The extra strings are short identifiers, and three of them
+form a cluster that changes the model of the whole UAT path:
+
+```
+uat_dekkerlock_lock          → 0xfffffff027005b31
+uat_dekker_gate_lock         → 0xfffffff027005b94
+uat_sync_outer_tlb_sapt_flush→ 0xfffffff027005467
+"%s: UAT Dekker lock acquisition timed out after %llu ns (spun for %llu cycles)"
+"%s: UAT Dekker gate acquisition timed out after %llu ns (spun for %llu cycles)"
+```
+
+xref (adrp+add into `__TEXT`) lands in exactly five `__TEXT_EXEC` functions, and the
+log strings they already carry identify which UAT operation each one is:
+
+| function (820.40.24) | identified by its own log strings | op |
+|---|---|---|
+| `0xfffffff0270ad8f0` | `Corrupted map_data`, `Copying segments into %p will overflow the state object page` | `sptm_uat_map` |
+| `0xfffffff0270ac7b8` | `Corrupted prepare_fw_unmap_data`, `unmap_data` | `prepare_fw_unmap` / unmap |
+| `0xfffffff0270abc74` | `TTBR%d`, `Attempted a TLB Invalidate by ASID`, `Provided CTXID %d does not fit in the ASID field` | state ops (set CTXID, TLB by ASID) |
+| `0xfffffff0270aea24` | `new type not XNU_IOMMU`, `retyping from XNU_IOMMU but not to XNU_DEFAULT` | `sptm_uat_retype` |
+| `0xfffffff0270e9ccc` | `FTE %p should be held exclusive by sptm_retype()`, `Only CPU pages may need a GMMU TLBI on retype` | frame path of `sptm_retype` |
+| (`0xfffffff0270b0eb8` bootstrap-stage announce — uses the gate only) | | |
+
+Mechanics, from `0xfffffff0270abe94` on: `dsb sy`; read `s3_4_c15_c10_6`; compute a
+deadline from `cntfrq_el0` (masked to /8, `umulh`); on expiry log the "...timed out
+after %llu ns (spun for %llu cycles)" line; on success `dmb sy` + `stlurb` release and,
+after the operation, `uat_sync_outer_tlb_sapt_flush`. So in 27.2 **every UAT
+transition (map / unmap / context / retype) runs under a lock+gate pair with a
+bounded spin and an explicit timeout**, not under a bare flag.
+
+Also new in the same build and not in the earlier list:
+```
+VIOLATION_T8110_DART_UNGANG_GAPF_RACE
+"%s: dart %p (%s:%u): Inconsistent unganged clock protection configuration"
+sptm_t8110dart_skip_disable_clock_protection_write
+sptm_allow_vm_isa_internal_guests / sptm_is_iuou_or_iuos_device / internal-use-only-unit
+/chosen/manifest-properties      (DT manifest gating for internal/VM guests)
+0x4B1D000000000003ULL            (was ..._002 in 27.0.1)
+```
+
+Correction to the flagship framing: the TLBI-verification strings are confirmed
+byte-exactly (`verify-gmmu-tlbis-at-sync`, `gmmu-tlbi-verification-reg`,
+`gmmu-tlbi-verification-bit` validated into `[0,63]`, `Failed to verify TLBI`), and the
+UAT Dekker discipline is the *other half* of the same fix — verification without
+mutual exclusion would still leave the retype-vs-map window open.
+
+Implication for reachability (unchanged): SPTM entry is the SMC/UAT gate, EL1+PPL
+only. The new locks make the retype/map race strictly harder, so any surviving
+primitive in this area has to live outside these five functions (hibernate path,
+DART config, or the internal-guest gating).
+
