@@ -884,3 +884,20 @@ same structure family (HEVC parameter sets), same fix window (27.2, the
 
 Cross-validation milestone: a pending third-party report + our independent
 binary evidence now point at the same surface. First-public corroboration.
+
+## Wi-Fi VECTOR (2026-11-07, kernelcache-level)
+
+- iPhone14,5 Wi-Fi = Broadcom **dext** (DriverKit), NOT in the kernelcache
+  fileset — io80211-style kexts don't exist here; kernel side is
+  `AppleOLYHAL` (the PCIe/Wi-Fi HAL glue).
+- `AppleOLYHAL` 198480→198480 bytes, 146KB changed across 44 regions =
+  **dext crash-recovery rework** (FLR — Function Level Reset): new strings
+  "Recovering dext crash (FLR...)", "allowing external full reset to proceed
+  with missing wifi dext", "Dext is unavailable. skip PreparePCIeError".
+  Robustness/availability churn, not a security fix.
+- dawgyg's CONFIRMED io80211 ANQP NAI-realm OOB read is Intel-Wi-Fi (macOS);
+  the iPhone analogue would live in the BCM **dext**, extractable only from
+  the OS cryptex DMG — separate tooling (queued, low priority: no evidence
+  Apple touched the dext in this window).
+
+Verdict: Wi-Fi vector at kernelcache level = clean (recovery rework only).
