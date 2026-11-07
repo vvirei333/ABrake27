@@ -923,3 +923,5 @@ Our kext-level cross-check:
 Verdict: CVE-2026-112705 fix = high-confidence correlated with the new AVE2
 count clamps (class + window match), exact site unresolved. Panic is DoS-only
 per PoC author.
+
+- [murk-sus/F1OOB-PoC](https://github.com/murk-sus/F1OOB-PoC) — claimed IOSurface compressed-plane 32-bit wrap → same-context GPU OOB (27.2 24B115, iPhone14,7). Author = murk-* family (X @murkuwuwu, previously AI-chat "exploits") → low prior, but THIS repo is technically coherent: real IOSurface XML keys (PlaneSize/SliceCount/PlaneDataRegionBytesPerSlice verified present in our kexts), bug class = 32-bit truncation (same class as our rlebuf fix), candid limitations section. IOSurface kext heavily churned 2701↔272 (165KB/501 regions) — verdict on the specific wrap deferred: needs targeted diff of the plane-size computation. Unverified; DoS/same-context only per author.
