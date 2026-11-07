@@ -983,3 +983,29 @@ corroborating or consistent binary evidence from our diffs.
 16.7.16, 0 in 27.0.1, 5 in 27.2.** The flagship guard born exactly in 27.2 —
 now three-point dated. (cmp #0x37 counts are noisy across other users; the
 sub#0x85 immediate is the clean discriminator.)
+
+## 2026-11-07 — CVE-2026-112611 (murk-sus/natsuk1) → CG-SEC-187882049 реатрибуция
+
+Murka вернулся и опубликовал https://github.com/murk-sus/natsuk1 :
+CVE-2026-112611 — OOB write в CoreGraphics PDF Type 5 (lattice Gouraud) shading:
+FunctionType 2 с /N 1 (1 выходной компонент) при C0/C1 по 256 элементов —
+буфер под N, копирование полного C0/C1. PoC: VerticesPerRow 136 × 256 строк,
+BitsPerCoordinate 32, BitsPerComponent 8, DeviceCMYK. Проверка через
+SIGSEGV-хендлер (ESR WnR=1) — write-примитив, не kernel R/W.
+
+**Бинарная верификация на нашей паре (cg_2701/cg_272 dis):**
+- 27.2 `_CGPDFShadingType5Init` содержит блок `cmp x9,#0x4; b.hi err; cmp x10,x9; b.ne err`
+  (0x183c5cacc–0x183c5cad8) → err-путь 0x183c5cb9c → `_pdf_error` со строкой
+  `CG-SEC-187882049: invalid function for type 5 shading (range dimension does
+  not match color space)`. Это проверка: выходная размерность функции должна
+  совпадать с компонентностью colorspace (и ≤4).
+- 27.0.1: блока НЕТ (функция 221 строк vs 246, `cmp x9,#0x4` отсутствует) —
+  mismatch N↔colorspace не проверяется. PoC проходит валидацию → баг жив.
+
+**Вердикт:** CG-SEC-187882049 = фикс CVE-2026-112611 в 27.2. Наша реатрибуция
+закрыта: маркер НЕ « unrelated hardening» (после отката 86950-атрибуции), а
+конкретный silent-fix этого CVE. Ранее найденный блок в `_CGPDFShadingType5Init`
+в 27.2 — это и есть патч. Формулировка строки («range dimension») покрывает и
+N↔C0/C1 mismatch той же проверкой x10 vs x9.
+- Файл PoC Murka: murka_archive-совместимый, публичный у него — у нас только анализ.
+- natsuk1 = его kernel R/W проект; 112611 — «primitive verification» ступень.
