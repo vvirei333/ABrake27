@@ -46,3 +46,14 @@ poc/probe_app/build/
 # Kernel/SPTM research artifacts (hundreds of MB — local only)
 kernel_diff/
 sptm_research/
+
+# extracted firmware artifacts (too big for git)
+extracted_*/
+extracted_272/
+extracted_16716/
+*.ipsw
+*.ipsw.part
+ipsws/
+kernel_diff/
+sptm_research/
+tmp_ipsw/
