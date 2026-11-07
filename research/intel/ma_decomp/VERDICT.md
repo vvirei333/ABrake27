@@ -859,3 +859,5 @@ The MIMESniffer/KanjiCode/OPFS trio is WebKit-code-diff campaign material.
 
 Methodology gold: the "declined" list maps Apple's triage bar precisely —
 reporting strategy for the portfolio: chain-composite findings, not solo reads.
+
+- [Ping-2o/ios26-27-iboot-research](https://github.com/Ping-2o/ios26-27-iboot-research) — AI-assisted iBoot audit (26/27): reconstruction-tooling audit, no confirmed vulns (F1 clear-loop overstride 16B, F2 32-bit boot-delay wrap — config-only). Borrowable method: reconstruction cross-check vs LLVM on 170k branch targets.
