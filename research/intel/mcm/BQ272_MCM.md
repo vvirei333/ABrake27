@@ -79,3 +79,12 @@ prefix in part_domain** as the primitive. respring() is a joke stub
 (webbrowser.open "jailbreak.party"). Runs only inside an on-device Python env;
 statically reviewed, not executed. Primitive matches the MCM surface we diffed:
 client token path identical 27.0.1↔27.2 — consistent with the video success.
+
+### 2026-11-08 16:xx — third newjail run (repro delta)
+Third mode=144 run (different KASLR slide, fn_pac=0x102c83a40 vs 0x1044b3a40
+in run 1) → again **absorbed 237 words / 1896 bytes**, ★CONTROLLED OOB
+CONFIRMED. So across two devices/reboots with different slides the write
+length is DETERMINISTIC (237 words) and lands inside the groomed region;
+run 2 (0 words, far=region_end) is the outlier — heap layout variance.
+Write is reproducible but non-addressable; vtable-hijack still fails.
+Build identity still absent from logs — attribution pending.
