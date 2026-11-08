@@ -88,3 +88,15 @@ length is DETERMINISTIC (237 words) and lands inside the groomed region;
 run 2 (0 words, far=region_end) is the outlier — heap layout variance.
 Write is reproducible but non-addressable; vtable-hijack still fails.
 Build identity still absent from logs — attribution pending.
+
+### 2026-11-08 17:xx — BQTool v2.0 (build 20) = the GUI from Murka's video
+Same bundle id as BQ272 v11 (app.lake9674.aquila8809), 260624 bytes.
+- **GestaltVC**: applyTweaks/revertTweaks/loadGestalt, chooseSubtype, swipes;
+  **CacheExtraEditVC** = arbitrary CacheExtra key add/edit/delete (beyond the
+  fixed 25-tweak table — full MG plist editor).
+- **PosterBoardVC**: explore (TendiesExploreVC, catalog =
+  SerStars/Nugget-Wallpapers), applyAll, resetPosterBoard, Open PosterBoard.
+- **RECON FIXED**: startup banner now logs `=== BQEscape start | iOS %@ |
+  bundle %@ ===` — future logs carry iOS version identity. Partial (no
+  hw.machine), but the main confounder (iOS build) is now attributable.
+- Still logs to Documents/bqtool.log. Static analysis only, not executed.
