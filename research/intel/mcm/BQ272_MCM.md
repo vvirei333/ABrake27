@@ -100,3 +100,28 @@ Same bundle id as BQ272 v11 (app.lake9674.aquila8809), 260624 bytes.
   bundle %@ ===` — future logs carry iOS version identity. Partial (no
   hw.machine), but the main confounder (iOS build) is now attributable.
 - Still logs to Documents/bqtool.log. Static analysis only, not executed.
+
+## 2026-11-08 late — murk-sus released kamui-escape (open source, MIT)
+https://github.com/murk-sus/kamui-escape — evolution of BQTool lineage,
+**sandbox escape + MG editor for iOS 27.0.1–27.2, source included**.
+- Old bad_query (class-13, partDomain `..` traversal) **PATCHED on 27.2**:
+  partDomain validated + symlink resolution validated when partDomain
+  non-empty (server-side; consistent with our diff — client set_part_domain
+  identical 27.0.1↔27.2, enforcement is containermanagerd).
+- **NEW vector (first-public): class-7 query with OWN group identifier,
+  part 3, EMPTY partDomain, flags 0x8100000000 — app replaces its app-group
+  Library/Caches with symlink → target; containermanagerd follows the
+  symlink and issues a sandbox extension for the resolved target.**
+  Works on 27.2. Class-2 parent-Library rename fallback (opt-in; EPERM on
+  27.2 for non-app-group dirs).
+- Multi-strategy BQEscape: class-13 traversal (27.0.x) → class-7 symlink
+  (27.2) → class-2 rename → class-13 direct MG → class-12 geod.
+- Supersession (our 27.2 finding) did NOT stop this vector — instance-UUID
+  machinery is additive, not yet enforcing on this path.
+- Credits: bad_query by forcequitOS + 0xjohnny; catalog = SerStars
+  (the same one we staged in Mal016/packs). Responsible disclosure section
+  proposes the fix: canonicalize part directories, reject symlinks.
+- ABrake27 relevance: our MCM surface diff predicted "client unchanged,
+  enforcement daemon-side" — kamui confirms; our Supersession note predicted
+  future hardening — kamui's vector will die when supersession starts
+  enforcing. Report-worthy window exists.
