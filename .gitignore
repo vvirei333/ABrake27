@@ -57,3 +57,5 @@ ipsws/
 kernel_diff/
 sptm_research/
 tmp_ipsw/
+mcm_research/
+research/intel/mcm/*.dis
