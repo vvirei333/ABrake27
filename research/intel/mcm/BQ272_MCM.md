@@ -48,3 +48,34 @@
 ## Hygiene note
 Unsigned third-party IPA; analyzed statically (unzip + strings + objdump).
 Logs contain only container UUIDs, no user content. Video analyzed as media.
+
+## 2026-11-08 late — newjail v2 + PyCha1n.py (Murka's toolchain, static only)
+
+**newjail (2).ipa** (com.example.newjail, binary 457KB → 526KB vs archived v1):
+now a full multi-CVE research harness with logged stage verdicts:
+- CVE-2026-112611 (CG PDF): C0 Jump v2, fake vtable, ABW v3 fake-object probing;
+  own verdict line: **"112611: CLOSED (crash-only)"** — matches our CG-SEC-187882049
+  dim-match block analysis (fixed in 27.2, PoC crash-only).
+- CVE-2026-86950 (CG): size-sweep v10-12, VM-hole groom, "Primitives ready,
+  KASLR blocked", KASLR bypass attempts via 65343/65371 (ACM handle capture,
+  Security framework SE key).
+- CALIF-v2/v3: combined 112611 PDF + "H9 VideoToolbox" XPC — verdict lines:
+  "heap corruption works, but H9 didn't fire", "isolated to our process".
+- CVE-2026-112706 family: WAL/sqlite + .rp1 stages — matches our quarantined
+  CVE-112706 doc (sandbox escape).
+- 2stage: dry-run → fake vtable spray → render → verify exec (nj_pwn_target).
+- 64788: IOServiceOpen all types failed — sandbox blocking.
+- Stage 3 = nj_stage3_sandbox_escape.
+Hygiene: static analysis only, never executed (unsigned TG IPA, same rule).
+
+**PyCha1n.py** (python ctypes port of bad_query): loads
+libsystem_containermanager + xpc, container_query(class=13, part=3,
+group_identifiers="systemgroup.com.apple.mobilegestaltcache", part_domain=
+"../../../../../../../.."+path, flags=0x8000000000) → get_single_result →
+container_copy_sandbox_token → sandbox_extension_consume → read/write
+com.apple.MobileGestalt.plist CacheExtra (25 tweaks, Dynamic Island / AOD /
+spoof ProductType iPhone16,1). Novel detail vs BQ272 v11: the **path-traversal
+prefix in part_domain** as the primitive. respring() is a joke stub
+(webbrowser.open "jailbreak.party"). Runs only inside an on-device Python env;
+statically reviewed, not executed. Primitive matches the MCM surface we diffed:
+client token path identical 27.0.1↔27.2 — consistent with the video success.
