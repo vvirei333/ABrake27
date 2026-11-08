@@ -1009,3 +1009,27 @@ SIGSEGV-хендлер (ESR WnR=1) — write-примитив, не kernel R/W.
 N↔C0/C1 mismatch той же проверкой x10 vs x9.
 - Файл PoC Murka: murka_archive-совместимый, публичный у него — у нас только анализ.
 - natsuk1 = его kernel R/W проект; 112611 — «primitive verification» ступень.
+
+## 2026-11-08 — CVE-2026-112611: 27.2-фикс ЧАСТИЧНЫЙ (уточнение)
+
+Реверс чека 27.2 `_CGPDFShadingType5Init` @0x183c5cacc: x9 = components
+colorspace ([x8+0x30]), x10 = output count функции ([fn+0x30]).
+`cmp x9,#0x4; b.hi err; cmp x10,x9; b.ne err` — проверяется ТОЛЬКО
+«выходы функции ↔ colorspace». Длина C0/C1 против /N НЕ проверяется.
+
+Логи Akrien (newjail 146 modes, build НЕ записан — RECON неизвестен):
+- mode=144: **CONTROLLED OOB WRITE CONFIRMED** — CG записал 1896 байт
+  (237 слов) в fake-vtable регион без крэша; vtable-jump не произошёл
+  (2nd render не прочитал испорченную vtable).
+- mode=145: groom 500 CGShading → survived, vtable corruption не видна.
+- mode=143 (R→0): все NO FAULT; mode=142 FT4 0/12; mode=141 /Range 0/6 —
+  эти пути валидируются.
+
+Гипотеза (два сценария, неразличимы без RECON):
+1. Запуск на 27.0.1 — OOB ожидаем, ничего нового.
+2. Запуск на 27.2 — dim-match чек блокирует исходную форму PoC (N=1 vs
+   CMYK), но базовый баг «allocation by N, copy full C0/C1» жив в
+   конфигурации DeviceGray+N=1+C0/C1×256 (чек проходит: 1==1).
+   Тогда фикс = частичный, требует доработки Apple.
+Действие: запросить build-строку у Акриена (hw.machine/kern.osrelease);
+при 27.2 — протестировать Gray-вариант нашей парой вердиктов.
